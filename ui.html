@@ -176,10 +176,8 @@
   .startSteps b{color:var(--fg);font-weight:500}
   .startSteps code{font-family:var(--mono);font-size:12.5px;background:var(--panel2);
                    border:1px solid var(--line);border-radius:4px;padding:1px 5px}
-  .startBtn{background:var(--panel);border:1px solid var(--accent);color:var(--accent);
-            border-radius:8px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer}
-  .startBtn:hover{background:var(--accent-soft)}
-  .startHint{font-size:12px;color:var(--muted);margin:9px 0 0;opacity:.85}
+  .startNote{font-size:13px;line-height:1.6;color:var(--muted);margin:0;
+             padding-left:13px;border-left:2px solid var(--accent)}
   .thinking{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
   .thinking i{width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;animation:b 1.3s infinite}
   .thinking i:nth-child(2){animation-delay:.18s}.thinking i:nth-child(3){animation-delay:.36s}
@@ -522,13 +520,6 @@ const $ = (id) => document.getElementById(id);
 let mode="plan", lastSig="", lastVersion=-1, pending=false, stalled=false;
 marked.setOptions({breaks:true});
 
-const STARTER =
-`Read the ticket and src/App.test.jsx. Do not modify the test file.
-
-Plan the implementation. Where the ticket and the tests disagree, follow the
-tests and tell me where they disagreed. State any decision the tests do not
-pin down so I can check it before you write code.`;
-
 function emptyHtml(state){
   const me = (state.problems||[]).find(p=>p.id===state.current) || {};
   const t = state.test;
@@ -553,9 +544,10 @@ function emptyHtml(state){
       <li><b>Review the diff</b> and ship, or send it back.</li>
     </ol>
 
-    <button class="startBtn" id="useStarter">Use a starting prompt</button>
-    <p class="startHint">Fills the box below. Edit it before sending — the wording
-      is yours, the discipline is the point.</p>
+    <p class="startNote">A plan prompt is yours to word. It earns its place when it
+      does three things: names what must not change, says the tests win where they
+      and the ticket disagree, and asks for the decisions the tests leave open —
+      so you see them before there is code to argue with.</p>
   </div>`;
 }
 
@@ -588,13 +580,6 @@ function render(state){
 
   const atBottom = log.scrollHeight-log.scrollTop-log.clientHeight < 140;
   log.innerHTML = state.messages.length ? "" : emptyHtml(state);
-  const starter = $("useStarter");
-  if(starter) starter.onclick = () => {
-    setMode("plan");
-    $("input").value = STARTER;
-    $("input").focus();
-    $("input").dispatchEvent(new Event("input"));
-  };
   for(const m of state.messages){
     const d=document.createElement("div");
     d.className="msg "+m.role;
