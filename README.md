@@ -142,9 +142,13 @@ AGENT_BASE_URL=http://localhost:11434/v1   # default
 AGENT_MODEL=qwen2.5-coder:7b               # default
 ```
 
-> **Status:** `agent.py`'s block parser and write guards are unit-tested, but it
-> has not been exercised end to end against a live model. The harness does not
-> depend on it.
+> **Status:** the whole loop is verified end to end — poll, call, parse, write,
+> run the suite, post the result — against a stub endpoint speaking the same
+> OpenAI-compatible protocol. All three write guards held in that run: the spec
+> was refused, a `../` path was refused, and only the intended file was written.
+> It has **not** yet been run against a real local model, so expect the rough
+> edges of small-model output rather than of the runner. The harness does not
+> depend on it either way.
 
 In agent mode a model returns whole files in fenced blocks tagged with a path:
 

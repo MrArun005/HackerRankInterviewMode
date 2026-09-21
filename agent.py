@@ -175,7 +175,7 @@ def handle(pid, slot):
         return
 
     written, skipped, failed = apply_blocks(pid, reply)
-    prose = BLOCK_RE.sub("", reply).strip()
+    prose = re.sub(r"\n{3,}", "\n\n", BLOCK_RE.sub("", reply)).strip()
     out = [prose] if prose else []
 
     if written:
