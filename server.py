@@ -189,6 +189,16 @@ def npm(pid, *args, timeout=240):
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m|\[\d{1,3}m")
 
 
+def short_failure(raw):
+    """The assertion, without testing-library's DOM dump. The full text is kept
+    separately so the UI can reveal it on demand."""
+    if not raw:
+        return ""
+    head = raw.split("\n\nIgnored nodes")[0].split("\n\nThis could be")[0]
+    line = " ".join(l.strip() for l in head.strip().splitlines() if l.strip())
+    return line[:220]
+
+
 def vitest_summary(pid):
     """Read the JSON reporter output. npm exits non-zero on failures, so the
     file - not the exit code - is the source of truth."""
@@ -201,8 +211,9 @@ def vitest_summary(pid):
     cases = []
     for r in d.get("testResults", []):
         for a in r.get("assertionResults", []):
+            raw = ANSI_RE.sub("", "\n".join(a.get("failureMessages", [])))
             cases.append({"title": a.get("title", ""), "status": a.get("status", ""),
-                          "message": ANSI_RE.sub("", " ".join(a.get("failureMessages", [])))[:600]})
+                          "message": short_failure(raw), "detail": raw[:4000]})
     return {"passed": d.get("numPassedTests", 0), "total": d.get("numTotalTests", 0),
             "cases": cases, "ts": time.time()}
 

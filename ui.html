@@ -212,22 +212,35 @@
 
   /* ---------- tests ---------- */
   .testsWrap{height:100%}
-  .caselist{padding:8px 0}
-  .case{display:flex;gap:10px;align-items:flex-start;padding:7px 18px;font-size:13.5px}
-  .case .mark{font-family:var(--mono);font-size:10px;letter-spacing:.04em;
-              flex:0 0 34px;width:34px;text-align:center;padding:3px 0;border-radius:4px;
-              border:1px solid currentColor;line-height:1}
-  .case.pass .mark{color:var(--pass)} .case.fail .mark{color:var(--fail)}
-  .case .title{flex:1;min-width:0}
-  .case.pass .mark{color:var(--pass)} .case.fail .mark{color:var(--fail)}
-  .case.fail .title{color:var(--fail)}
-  .case .title{font-weight:500}
-  .failmsg{margin:0 18px 12px 46px;padding:10px 12px;background:var(--panel2);
-           border:1px solid var(--line);border-left:2px solid var(--fail);border-radius:0 8px 8px 0;
-           font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:pre-wrap;
-           max-height:180px;overflow:auto}
-  .summaryLine{padding:14px 18px 6px;font-weight:600}
-  .summaryLine.pass{color:var(--pass)} .summaryLine.fail{color:var(--fail)}
+  .caselist{padding:2px 0 14px}
+  .case{
+    display:grid;grid-template-columns:18px 1fr;gap:10px;align-items:baseline;
+    padding:6px 18px;border-left:2px solid transparent
+  }
+  .case + .case{border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+  .case.fail{border-left-color:var(--fail);cursor:pointer}
+  .case.fail:hover{background:var(--panel2)}
+  .case .tmark{font-family:var(--mono);font-size:13px;line-height:1.5}
+  .case.pass .tmark{color:var(--pass)}
+  .case.fail .tmark{color:var(--fail)}
+  .case .tname{font:400 13.5px/1.5 var(--sans);color:var(--fg);min-width:0}
+  .case.pass .tname{color:var(--muted)}
+  .case .why{
+    grid-column:2;font-family:var(--mono);font-size:11.5px;line-height:1.5;
+    color:var(--muted);margin-top:3px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+  }
+  .case.open .why{white-space:pre-wrap;color:var(--fg);opacity:.85;
+                  background:var(--panel2);border-radius:6px;padding:9px 11px;
+                  max-height:260px;overflow:auto}
+  .case .more{grid-column:2;font-size:11px;color:var(--accent);opacity:.75;margin-top:2px}
+  .tsummary{
+    display:flex;align-items:baseline;gap:12px;padding:16px 18px 10px;
+    border-bottom:1px solid var(--line)
+  }
+  .tsummary .n{font:500 15px/1 var(--sans)}
+  .tsummary .n.pass{color:var(--pass)} .tsummary .n.fail{color:var(--fail)}
+  .tsummary .sub{font-size:12px;color:var(--muted)}
 
   /* ---------- diff ---------- */
   .diffWrap{height:100%;display:grid;grid-template-columns:190px 1fr;gap:14px}
@@ -774,23 +787,45 @@ function paintDiff(text){
 /* ---------- test output ---------- */
 function paintTests(){
   const body=$("testsBody"), lbl=$("testsLbl");
-  if(!TEST){ lbl.textContent="not run yet";
-    body.innerHTML='<p class="none">Press Run tests.</p>'; return; }
-  const green = TEST.total>0 && TEST.passed===TEST.total;
-  lbl.textContent = TEST.passed+" / "+TEST.total+" passing";
-  if(!TEST.cases || !TEST.cases.length){
-    body.innerHTML='<p class="none">No per-case detail — this problem reports totals only.</p>';
+  if(!TEST){
+    lbl.textContent="not run yet";
+    body.innerHTML='<p class="none">Press Run tests.</p>';
     return;
   }
-  let html='<div class="summaryLine '+(green?"pass":"fail")+'">'
-    +TEST.passed+" / "+TEST.total+' passing</div><div class="caselist">';
-  for(const c of TEST.cases){
-    const ok=c.status==="passed";
-    html+='<div class="case '+(ok?"pass":"fail")+'"><span class="mark">'
-      +(ok?"PASS":"FAIL")+'</span><span class="title">'+escapeHtml(c.title)+'</span></div>';
-    if(!ok && c.message) html+='<div class="failmsg">'+escapeHtml(c.message)+'</div>';
+  const green = TEST.total>0 && TEST.passed===TEST.total;
+  const failed = TEST.total - TEST.passed;
+  lbl.textContent = TEST.passed+" / "+TEST.total;
+
+  let html='<div class="tsummary"><span class="n '+(green?"pass":"fail")+'">'
+    + (green ? "All "+TEST.total+" passing" : failed+" failing")
+    + '</span><span class="sub">'+TEST.passed+" of "+TEST.total+' passing</span></div>';
+
+  if(!TEST.cases || !TEST.cases.length){
+    body.innerHTML = html + '<p class="none">No per-case detail for this problem.</p>';
+    return;
   }
-  body.innerHTML=html+"</div>";
+
+  html+='<div class="caselist">';
+  TEST.cases.forEach((c,i)=>{
+    const ok=c.status==="passed";
+    html+='<div class="case '+(ok?"pass":"fail")+'" data-i="'+i+'">'
+      + '<span class="tmark">'+(ok?"&#10003;":"&#10007;")+'</span>'
+      + '<span class="tname">'+escapeHtml(c.title)+'</span>'
+      + (!ok && c.message ? '<div class="why">'+escapeHtml(c.message)+'</div>' : "")
+      + (!ok && c.detail  ? '<div class="more">show full output</div>' : "")
+      + '</div>';
+  });
+  body.innerHTML = html + "</div>";
+
+  body.querySelectorAll(".case.fail").forEach(el=>{
+    el.onclick=()=>{
+      const c=TEST.cases[+el.dataset.i];
+      const open=el.classList.toggle("open");
+      el.querySelector(".why").textContent = open ? (c.detail||c.message) : c.message;
+      const more=el.querySelector(".more");
+      if(more) more.textContent = open ? "hide" : "show full output";
+    };
+  });
 }
 
 /* ---------- review gate ---------- */
