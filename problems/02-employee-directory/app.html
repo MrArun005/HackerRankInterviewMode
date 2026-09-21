@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Practice 02 — Employee Directory</title>
+<script src="/vendor/react.development.js"></script>
+<script src="/vendor/react-dom.development.js"></script>
+<script src="/vendor/babel.min.js"></script>
+<style>
+  /* theme: light by default, dark from the OS, either forced via data-theme */
+  :root{
+    --bg:#faf9f5; --panel:#fff; --line:#e6e3da; --fg:#1f1e1d; --muted:#7a7772;
+    --accent:#c96442; --pass:#3f7d5c; --fail:#b3482f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+    --bg:#1f1e1d; --panel:#262624; --line:#3a3936; --fg:#f0eee6; --muted:#9a968d;
+    --accent:#d97757; --pass:#6cc39a; --fail:#e08a72;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1f1e1d; --panel:#262624; --line:#3a3936; --fg:#f0eee6; --muted:#9a968d;
+    --accent:#d97757; --pass:#6cc39a; --fail:#e08a72;
+  }
+  :root[data-theme="light"]{
+    --bg:#faf9f5; --panel:#fff; --line:#e6e3da; --fg:#1f1e1d; --muted:#7a7772;
+    --accent:#c96442; --pass:#3f7d5c; --fail:#b3482f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+  header{padding:14px 22px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:baseline}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header span{color:var(--muted);font-size:13px}
+  main{display:grid;grid-template-columns:1fr 1fr;min-height:calc(100vh - 52px)}
+  @media (max-width:900px){main{grid-template-columns:1fr}}
+  section{padding:22px}
+  section+section{border-left:1px solid var(--line)}
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 15px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+  input[type=text]{background:transparent;border:1px solid var(--line);color:var(--fg);
+                   padding:8px 11px;border-radius:7px;font:inherit;width:100%}
+  button{background:var(--panel);border:1px solid var(--line);color:var(--fg);
+         padding:6px 11px;border-radius:7px;font:inherit;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin-top:14px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+     color:var(--muted);font-weight:500;padding:0 0 8px;border-bottom:1px solid var(--line)}
+  td{padding:9px 0;border-bottom:1px solid var(--line)}
+  td:last-child{color:var(--muted);font-size:13.5px}
+  .pages{display:flex;gap:6px;margin-top:14px}
+  .muted{color:var(--muted)}
+  .t{margin:0 0 3px;font-variant-numeric:tabular-nums}
+  .pass{color:var(--pass)} .fail{color:var(--fail)}
+  .msg{color:var(--muted);font-size:12.5px;margin:2px 0 11px 20px;font-family:ui-monospace,monospace}
+  #summary{margin-bottom:15px;font-weight:600}
+  #sandbox{position:absolute;left:-9999px;top:0}
+</style>
+<script>
+  // theme handed down by the agent-editor shell via ?theme=
+  (() => {
+    const t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  })();
+</script>
+</head>
+<body>
+<header>
+  <h1>Practice 02 — React: Employee Directory</h1>
+  <span>left: live app &nbsp;·&nbsp; right: graded tests</span>
+</header>
+<main>
+  <section><h2>Live app</h2><div class="card"><div id="app-live"></div></div></section>
+  <section><h2>Tests</h2><div id="summary">running…</div><div id="test-results"></div></section>
+</main>
+<div id="sandbox" aria-hidden="true" inert></div>
+
+<script type="text/babel" data-presets="react">
+/* ============================================================
+   SEED DATA
+   ============================================================ */
+const EMPLOYEES = [
+  { id: 1,  name: "Aanya Sharma",  role: "Payroll Analyst"     },
+  { id: 2,  name: "Rahul Verma",   role: "HR Business Partner" },
+  { id: 3,  name: "Priya Menon",   role: "Engineering Manager" },
+  { id: 4,  name: "Vikram Reddy",  role: "Finance Director"    },
+  { id: 5,  name: "Meena Joshi",   role: "Payroll Analyst"     },
+  { id: 6,  name: "Suresh Babu",   role: "QA Lead"             },
+  { id: 7,  name: "Divya Nair",    role: "Recruiter"           },
+  { id: 8,  name: "Arun Kumar",    role: "Engineering Manager" },
+  { id: 9,  name: "Kavya Iyer",    role: "Compliance Officer"  },
+  { id: 10, name: "Nikhil Rao",    role: "Recruiter"           },
+  { id: 11, name: "Sneha Pillai",  role: "Finance Analyst"     },
+];
+
+const PAGE_SIZE = 4;
+
+/* ============================================================
+   API — swapped out by the tests. Call it as api.list().
+   ============================================================ */
+const DEFAULT_API = {
+  list: () => new Promise((resolve) => setTimeout(() => resolve(EMPLOYEES), 450)),
+};
+let api = DEFAULT_API;
+
+/* ============================================================
+   YOUR CODE — implement App below
+   ============================================================ */
+const App = () => {
+  const [rows, setRows]     = React.useState([]);
+  const [status, setStatus] = React.useState("loading");   // loading | ready | error
+  const [query, setQuery]   = React.useState("");
+  const [page, setPage]     = React.useState(1);
+
+  const load = React.useCallback(() => {
+    setStatus("loading");
+    api.list().then(
+      (data) => { setRows(data); setStatus("ready"); },
+      ()     => { setStatus("error"); }
+    );
+  }, []);                       // closes over nothing that varies - never re-create it
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const needle  = query.trim().toLowerCase();
+  const matches = needle
+    ? rows.filter((e) => (e.name + " " + e.role).toLowerCase().includes(needle))
+    : rows;
+
+  // These two travel together. max(1,...) keeps pageCount from being 0, which
+  // would make the clamp below produce page 0 and a negative slice index.
+  // The clamp makes "page is valid" true at the point of use, rather than
+  // relying on every future caller remembering to reset it.
+  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  const current   = Math.min(page, pageCount);
+  const slice     = matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
+  const onSearch = (e) => { setQuery(e.target.value); setPage(1); };
+
+  if (status === "loading") return <p data-testid="loading" className="muted">Loading…</p>;
+
+  if (status === "error") return (
+    <div>
+      <p data-testid="error">Couldn't load employees.</p>
+      <button data-testid="retry" onClick={load}>Retry</button>
+    </div>
+  );
+
+  if (rows.length === 0) return <p data-testid="empty" className="muted">No employees yet.</p>;
+
+  return (
+    <div>
+      <input
+        type="text"
+        data-testid="search"
+        value={query}
+        onChange={onSearch}
+        placeholder="Search name or role"
+        aria-label="Search employees"
+      />
+
+      {matches.length === 0 ? (
+        <p data-testid="noMatches" className="muted">No matches</p>
+      ) : (
+        <React.Fragment>
+          <table data-testid="table">
+            <thead><tr><th>Name</th><th>Role</th></tr></thead>
+            <tbody data-testid="tableBody">
+              {slice.map((e) => (
+                <tr key={e.id}><td>{e.name}</td><td>{e.role}</td></tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="pages" data-testid="pageButtons">
+            {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                data-testid={"page-" + n}
+                onClick={() => setPage(n)}
+                aria-current={n === current}
+                style={n === current ? { borderColor: "var(--accent)", color: "var(--accent)" } : null}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </React.Fragment>
+      )}
+    </div>
+  );
+};
+
+/* ============================================================
+   TESTS — READ ONLY. DO NOT MODIFY.
+   ============================================================ */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const tick  = () => sleep(25);
+
+async function waitFor(fn, ms = 1200) {
+  const t0 = Date.now(); let last = null;
+  while (Date.now() - t0 < ms) {
+    try { const v = fn(); if (v !== false && v != null) return v; }
+    catch (e) { last = e; }
+    await sleep(15);
+  }
+  throw new Error("timed out waiting" + (last ? " — " + last.message : ""));
+}
+function q(h, id) {
+  const el = h.querySelector(`[data-testid="${id}"]`);
+  if (!el) throw new Error(`no element with data-testid="${id}"`);
+  return el;
+}
+function maybe(h, id) { return h.querySelector(`[data-testid="${id}"]`); }
+function eq(actual, expected, what) {
+  const a = JSON.stringify(actual), e = JSON.stringify(expected);
+  if (a !== e) throw new Error(`${what}: expected ${e}, got ${a}`);
+}
+function type(el, value) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+  setter.call(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+const TESTS = [
+  ["should show the loading state while the request is in flight", async (t) => {
+    t.api(() => new Promise(() => {}));                 // never settles
+    const h = t.mount();
+    await tick();
+    q(h, "loading");
+    eq(maybe(h, "tableBody"), null, "table while loading");
+  }],
+
+  ["should render the first 4 rows and 3 page buttons", async (t) => {
+    t.api(async () => EMPLOYEES);
+    const h = t.mount();
+    await waitFor(() => maybe(h, "tableBody"));
+    eq(q(h, "tableBody").children.length, 4, "rows");
+    eq(q(h, "tableBody").children[0].textContent.includes("Aanya Sharma"), true, "first row");
+    eq(q(h, "pageButtons").children.length, 3, "page buttons");
+    eq(maybe(h, "loading"), null, "loading after resolve");
+  }],
+
+  ["should show an error with a retry that recovers", async (t) => {
+    let calls = 0;
+    t.api(async () => { calls++; if (calls === 1) throw new Error("network"); return EMPLOYEES; });
+    const h = t.mount();
+    await waitFor(() => maybe(h, "error"));
+    eq(q(h, "error").textContent.includes("Couldn't load employees."), true, "error text");
+    q(h, "retry").click();
+    await waitFor(() => maybe(h, "tableBody"));
+    eq(q(h, "tableBody").children.length, 4, "rows after retry");
+    eq(maybe(h, "error"), null, "error cleared after retry");
+  }],
+
+  ["should show the empty state when the API returns nothing", async (t) => {
+    t.api(async () => []);
+    const h = t.mount();
+    await waitFor(() => maybe(h, "empty"));
+    eq(q(h, "empty").textContent.trim(), "No employees yet.", "empty text");
+  }],
+
+  ["should show rows 5-8 when page 2 is clicked", async (t) => {
+    t.api(async () => EMPLOYEES);
+    const h = t.mount();
+    await waitFor(() => maybe(h, "tableBody"));
+    q(h, "page-2").click();
+    await tick();
+    const rows = q(h, "tableBody").children;
+    eq(rows.length, 4, "rows on page 2");
+    eq(rows[0].textContent.includes("Meena Joshi"), true, "first row of page 2");
+    eq(rows[3].textContent.includes("Arun Kumar"), true, "last row of page 2");
+  }],
+
+  ["should filter by name or role and recalculate the buttons", async (t) => {
+    t.api(async () => EMPLOYEES);
+    const h = t.mount();
+    await waitFor(() => maybe(h, "tableBody"));
+    type(q(h, "search"), "analyst");                    // matches a role, 3 people
+    await waitFor(() => q(h, "tableBody").children.length === 3);
+    eq(q(h, "pageButtons").children.length, 1, "buttons after filtering to 3");
+    type(q(h, "search"), "priya");                      // matches a name
+    await waitFor(() => q(h, "tableBody").children.length === 1);
+    eq(q(h, "tableBody").children[0].textContent.includes("Priya Menon"), true, "name match");
+  }],
+
+  ["should reset to page 1 when the search changes", async (t) => {
+    t.api(async () => EMPLOYEES);
+    const h = t.mount();
+    await waitFor(() => maybe(h, "tableBody"));
+    q(h, "page-3").click();
+    await tick();
+    eq(q(h, "tableBody").children.length, 3, "rows on page 3");
+    type(q(h, "search"), "recruiter");                  // 2 matches -> 1 page
+    await waitFor(() => q(h, "tableBody").children.length === 2);
+    eq(q(h, "tableBody").children[0].textContent.includes("Divya Nair"), true,
+       "should be showing page 1 of the filtered list");
+  }],
+
+  ["should not refetch when the search or page changes", async (t) => {
+    let calls = 0;
+    t.api(async () => { calls++; return EMPLOYEES; });
+    const h = t.mount();
+    await waitFor(() => maybe(h, "tableBody"));
+    eq(calls, 1, "calls after the initial load");
+    type(q(h, "search"), "recruiter");
+    await waitFor(() => q(h, "tableBody").children.length === 2);
+    q(h, "page-1").click();
+    await tick();
+    eq(calls, 1, "filtering and paging happen in memory, not over the wire");
+  }],
+
+  ['should show "No matches" when the search excludes everything', async (t) => {
+    t.api(async () => EMPLOYEES);
+    const h = t.mount();
+    await waitFor(() => maybe(h, "tableBody"));
+    type(q(h, "search"), "zzzz");
+    await waitFor(() => maybe(h, "noMatches"));
+    eq(q(h, "noMatches").textContent.trim(), "No matches", "no-matches text");
+    eq(maybe(h, "empty"), null, "empty is for an empty API result, not a filtered-out list");
+  }],
+];
+
+async function runTests() {
+  const host = document.getElementById("sandbox");
+  const out  = document.getElementById("test-results");
+  out.innerHTML = ""; let passed = 0;
+
+  for (const [name, fn] of TESTS) {
+    host.innerHTML = "<div></div>";
+    let root = null;
+    const ctx = {
+      api: (f) => { api = { list: f }; },
+      mount: () => { root = ReactDOM.createRoot(host.firstChild); root.render(<App />); return host; },
+    };
+    const row = document.createElement("div");
+    try {
+      await fn(ctx);
+      passed++;
+      row.className = "t pass"; row.innerHTML = "✓ <b>" + name + "</b>";
+      out.appendChild(row);
+    } catch (err) {
+      row.className = "t fail"; row.innerHTML = "✗ <b>" + name + "</b>";
+      out.appendChild(row);
+      const m = document.createElement("div");
+      m.className = "msg"; m.textContent = err.message;
+      out.appendChild(m);
+    }
+    if (root) root.unmount();
+    api = DEFAULT_API;
+  }
+
+  const s = document.getElementById("summary");
+  s.textContent = passed + " / " + TESTS.length + " passing";
+  s.className = passed === TESTS.length ? "pass" : "fail";
+}
+
+// The tests swap `api` out for doubles. React runs effects asynchronously, so a
+// live app mounted first would call whichever double happened to be installed
+// when its effect fired. Mount it after the run, with the real API restored.
+runTests().finally(() => {
+  ReactDOM.createRoot(document.getElementById("app-live")).render(<App />);
+});
+</script>
+</body>
+</html>

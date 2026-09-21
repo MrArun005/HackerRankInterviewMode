@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Practice 01 — Task Manager</title>
+<script src="/vendor/react.development.js"></script>
+<script src="/vendor/react-dom.development.js"></script>
+<script src="/vendor/babel.min.js"></script>
+<style>
+  /* theme: light by default, dark from the OS, either forced via data-theme */
+  :root{
+    --bg:#faf9f5; --panel:#fff; --line:#e6e3da; --fg:#1f1e1d; --muted:#7a7772;
+    --accent:#c96442; --pass:#3f7d5c; --fail:#b3482f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+    --bg:#1f1e1d; --panel:#262624; --line:#3a3936; --fg:#f0eee6; --muted:#9a968d;
+    --accent:#d97757; --pass:#6cc39a; --fail:#e08a72;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1f1e1d; --panel:#262624; --line:#3a3936; --fg:#f0eee6; --muted:#9a968d;
+    --accent:#d97757; --pass:#6cc39a; --fail:#e08a72;
+  }
+  :root[data-theme="light"]{
+    --bg:#faf9f5; --panel:#fff; --line:#e6e3da; --fg:#1f1e1d; --muted:#7a7772;
+    --accent:#c96442; --pass:#3f7d5c; --fail:#b3482f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; gap: 16px; align-items: baseline; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .01em; }
+  header span { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: calc(100vh - 57px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { padding: 24px; }
+  section + section { border-left: 1px solid var(--line); }
+  @media (max-width: 900px) { section + section { border-left: 0; border-top: 1px solid var(--line); } }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+  input[type=text] { background: transparent; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; border-radius: 6px; font: inherit; }
+  button { background: var(--panel); border: 1px solid var(--line); color: var(--fg); padding: 8px 12px; border-radius: 6px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  ul { list-style: none; padding: 0; margin: 16px 0; }
+  li { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .t { margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+  .t b { font-weight: 600; }
+  .pass { color: var(--pass); } .fail { color: var(--fail); }
+  .msg { color: var(--muted); font-size: 13px; margin: 2px 0 10px 22px; font-family: ui-monospace, monospace; }
+  #summary { margin-bottom: 16px; font-weight: 600; }
+  #sandbox { position: absolute; left: -9999px; top: 0; }
+</style>
+<script>
+  // theme handed down by the agent-editor shell via ?theme=
+  (() => {
+    const t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  })();
+</script>
+</head>
+<body>
+<header>
+  <h1>Practice 01 — React: Task Manager</h1>
+  <span>left: live app (click around) &nbsp;·&nbsp; right: graded tests</span>
+</header>
+<main>
+  <section>
+    <h2>Live app</h2>
+    <div class="card"><div id="app-live"></div></div>
+  </section>
+  <section>
+    <h2>Tests</h2>
+    <div id="summary">running…</div>
+    <div id="test-results"></div>
+  </section>
+</main>
+<div id="sandbox" aria-hidden="true" inert></div>
+
+<script type="text/babel" data-presets="react">
+/* ============================================================
+   SEED DATA
+   ============================================================ */
+const SEED = [
+  { id: 1, text: "Review payroll run",     done: false },
+  { id: 2, text: "Approve leave requests", done: true  },
+  { id: 3, text: "Update org chart",       done: false },
+];
+
+/* ============================================================
+   YOUR CODE — implement App below
+   ============================================================ */
+const MATCH = {
+  all:       ()  => true,
+  active:    (t) => !t.done,
+  completed: (t) => t.done,
+};
+
+const App = () => {
+  const [tasks, setTasks]   = React.useState(SEED);
+  const [filter, setFilter] = React.useState("all");
+  const [draft, setDraft]   = React.useState("");
+
+  const visible     = tasks.filter(MATCH[filter]);
+  const activeCount = tasks.filter((t) => !t.done).length;
+
+  // toggle by id, not row index - row index shifts under a filter
+  const toggle = (id) =>
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+
+  const remove = (id) => setTasks((prev) => prev.filter((t) => t.id !== id));
+
+  const add = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setTasks((prev) => [
+      ...prev,
+      { id: Math.max(0, ...prev.map((t) => t.id)) + 1, text, done: false },
+    ]);
+    setDraft("");
+  };
+
+  const tab = (key, label) => (
+    <button
+      data-testid={"filter" + key[0].toUpperCase() + key.slice(1)}
+      onClick={() => setFilter(key)}
+      aria-pressed={filter === key}
+      style={filter === key ? { borderColor: "var(--accent)", color: "var(--accent)" } : null}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div>
+      <form
+        onSubmit={(e) => { e.preventDefault(); add(); }}
+        style={{ display: "flex", gap: 8 }}
+      >
+        <input
+          type="text"
+          data-testid="taskInput"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="New task"
+          aria-label="New task"
+          style={{ flex: 1 }}
+        />
+        <button type="button" data-testid="addTaskBtn" onClick={add}>Add</button>
+      </form>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        {tab("all", "All")}
+        {tab("active", "Active")}
+        {tab("completed", "Completed")}
+      </div>
+
+      {visible.length === 0 && (
+        <p style={{ color: "var(--muted)", margin: "16px 0", fontSize: 13 }}>Nothing here.</p>
+      )}
+      <ul data-testid="taskList">
+        {visible.map((t, i) => (
+          <li key={t.id}>
+            <input
+              type="checkbox"
+              data-testid={"taskCheckbox-" + i}
+              checked={t.done}
+              onChange={() => toggle(t.id)}
+            />
+            <span style={{ textDecoration: t.done ? "line-through" : "none", opacity: t.done ? 0.55 : 1, flex: 1 }}>
+              {t.text}
+            </span>
+            <button
+              data-testid={"deleteTask-" + i}
+              onClick={() => remove(t.id)}
+              aria-label={"Delete " + t.text}
+              title="Delete"
+              style={{ padding: "2px 9px", lineHeight: 1.4, color: "var(--muted)" }}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <span data-testid="taskCount">
+        {activeCount} {activeCount === 1 ? "task" : "tasks"} left
+      </span>
+    </div>
+  );
+};
+
+/* ============================================================
+   TESTS — READ ONLY. DO NOT MODIFY.
+   ============================================================ */
+const tick = () => new Promise(r => setTimeout(r, 25));
+
+function q(host, id) {
+  const el = host.querySelector(`[data-testid="${id}"]`);
+  if (!el) throw new Error(`no element with data-testid="${id}"`);
+  return el;
+}
+function eq(actual, expected, what) {
+  const a = JSON.stringify(actual), e = JSON.stringify(expected);
+  if (a !== e) throw new Error(`${what}: expected ${e}, got ${a}`);
+}
+function type(el, value) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+  setter.call(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+const TESTS = [
+  ["should initially render 3 tasks", async (h) => {
+    eq(q(h, "taskList").children.length, 3, "task count");
+  }],
+
+  ["should initially show '2 tasks left'", async (h) => {
+    eq(q(h, "taskCount").textContent.trim(), "2 tasks left", "counter text");
+  }],
+
+  ["should add a task and clear the input", async (h) => {
+    type(q(h, "taskInput"), "File Form 16");
+    await tick();
+    q(h, "addTaskBtn").click();
+    await tick();
+    eq(q(h, "taskList").children.length, 4, "task count after add");
+    eq(q(h, "taskList").children[3].textContent.includes("File Form 16"), true, "new row text");
+    eq(q(h, "taskInput").value, "", "input after add");
+    eq(q(h, "taskCount").textContent.trim(), "3 tasks left", "counter after add");
+  }],
+
+  ["should not add a whitespace-only task", async (h) => {
+    type(q(h, "taskInput"), "   ");
+    await tick();
+    q(h, "addTaskBtn").click();
+    await tick();
+    eq(q(h, "taskList").children.length, 3, "task count after blank add");
+  }],
+
+  ["should filter to Active, Completed, then All", async (h) => {
+    q(h, "filterActive").click();    await tick();
+    eq(q(h, "taskList").children.length, 2, "active rows");
+    q(h, "filterCompleted").click(); await tick();
+    eq(q(h, "taskList").children.length, 1, "completed rows");
+    q(h, "filterAll").click();       await tick();
+    eq(q(h, "taskList").children.length, 3, "all rows");
+  }],
+
+  ["should say '1 task left' (singular) after completing one", async (h) => {
+    q(h, "taskCheckbox-0").click();
+    await tick();
+    eq(q(h, "taskCount").textContent.trim(), "1 task left", "singular counter");
+  }],
+];
+
+async function runTests() {
+  const host = document.getElementById("sandbox");
+  const out = document.getElementById("test-results");
+  out.innerHTML = "";
+  let passed = 0;
+
+  for (const [name, fn] of TESTS) {
+    host.innerHTML = "<div id='mount'></div>";
+    const root = ReactDOM.createRoot(host.firstChild);
+    root.render(<App />);
+    await tick();
+
+    const row = document.createElement("div");
+    try {
+      await fn(host);
+      passed++;
+      row.className = "t pass";
+      row.innerHTML = "✓ <b>" + name + "</b>";
+      out.appendChild(row);
+    } catch (err) {
+      row.className = "t fail";
+      row.innerHTML = "✗ <b>" + name + "</b>";
+      out.appendChild(row);
+      const m = document.createElement("div");
+      m.className = "msg";
+      m.textContent = err.message;
+      out.appendChild(m);
+    }
+    root.unmount();
+  }
+
+  const s = document.getElementById("summary");
+  s.textContent = `${passed} / ${TESTS.length} passing`;
+  s.className = passed === TESTS.length ? "pass" : "fail";
+}
+
+ReactDOM.createRoot(document.getElementById("app-live")).render(<App />);
+runTests();
+</script>
+</body>
+</html>

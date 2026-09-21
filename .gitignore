@@ -1,0 +1,7 @@
+__pycache__/
+backup-*/
+vendor/
+state.json
+inbox.log
+.state.lock
+*.tmp
