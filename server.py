@@ -575,7 +575,20 @@ class H(BaseHTTPRequestHandler):
             d["log"] = log_for(cur)
             return send_json(self, d)
         if p == "/api/ticket":
-            return send_json(self, {"ticket": read_text(os.path.join(PROBLEMS, cur, "ticket.md"))})
+            # Point at the spec and say how big it is - but never quote it.
+            # Reading the test file is the habit these problems train.
+            spec, count = None, 0
+            for cand in ("src/App.test.jsx", "src/App.test.tsx", "app.html"):
+                full = os.path.join(PROBLEMS, cur, cand)
+                if os.path.exists(full):
+                    spec = cand
+                    body = read_text(full)
+                    count = body.count("it(") + body.count('["should') + body.count("['should")
+                    break
+            return send_json(self, {
+                "ticket": read_text(os.path.join(PROBLEMS, cur, "ticket.md")),
+                "specPath": spec, "testCount": count,
+            })
         self.send_error(404)
 
     def do_POST(self):

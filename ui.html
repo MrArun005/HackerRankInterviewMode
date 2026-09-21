@@ -176,6 +176,18 @@
   .startSteps b{color:var(--fg);font-weight:500}
   .startSteps code{font-family:var(--mono);font-size:12.5px;background:var(--panel2);
                    border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .specBox{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:26px 0 0;
+           padding:16px 18px;background:var(--panel2);border:1px solid var(--line);
+           border-radius:10px;font-size:13.5px;line-height:1.6}
+  .specBox > div{flex:1;min-width:280px}
+  .specBox b{font-weight:600}
+  .specBox span{display:block;color:var(--muted);font-size:12.5px;margin-top:3px}
+  .specBox code{font-family:var(--mono);font-size:12.5px;background:var(--panel);
+                border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .startBtn{background:var(--panel);border:1px solid var(--accent);color:var(--accent);
+            border-radius:8px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;
+            white-space:nowrap}
+  .startBtn:hover{background:var(--accent-soft)}
   .startNote{font-size:13px;line-height:1.6;color:var(--muted);margin:0;
              padding-left:13px;border-left:2px solid var(--accent)}
   .thinking{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
@@ -996,7 +1008,21 @@ $("btnHold").onclick=()=>review("hold");
 
 async function loadTicket(){
   const r=await (await fetch("/api/ticket",{cache:"no-store"})).json();
-  $("ticketBody").innerHTML=marked.parse(r.ticket||"_No ticket for this problem._");
+  let html = marked.parse(r.ticket||"_No ticket for this problem._");
+  if(r.specPath){
+    html += `<div class="specBox">
+      <div>
+        <b>${r.testCount} tests</b> decide whether this is done.
+        They live in <code>${escapeHtml(r.specPath)}</code> and are read-only.
+        <span>Where the ticket and the tests disagree, the tests are right.</span>
+      </div>
+      <button class="startBtn" id="openSpec">Open the tests</button>
+    </div>`;
+  }
+  $("ticketBody").innerHTML = html;
+  const b=$("openSpec");
+  if(b) b.onclick=async()=>{ showTab("tCode"); rememberTab("tCode");
+                             await loadSource(false); if(r.specPath) openFile(r.specPath); };
 }
 
 /* ---------- problem switcher ---------- */
