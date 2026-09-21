@@ -72,6 +72,58 @@ python3 server.py    # → http://localhost:8899
 Python 3.8+ and Node 20.19+ (or 22.12+). The shell itself has no Python
 dependencies — `http.server`, `json`, `fcntl`, `subprocess`.
 
+## Running the agent
+
+The harness is the rig; the agent is whatever you point at it. Two ways.
+
+**A local model — no API key, nothing leaves the machine.** `agent.py` watches
+for a pending prompt and answers it, speaking the OpenAI-compatible
+`/chat/completions` shape, so Ollama, LM Studio and llama.cpp's server all work
+unchanged.
+
+```bash
+ollama serve &                     # or LM Studio, or llama-server
+ollama pull qwen2.5-coder:7b
+python3 agent.py                   # third terminal, alongside server.py
+```
+
+```bash
+AGENT_BASE_URL=http://localhost:11434/v1   # default
+AGENT_MODEL=qwen2.5-coder:7b               # default
+AGENT_POLL=1.5                             # seconds
+```
+
+Sizing: a 7B at Q4 needs roughly 5 GB of RAM. On a 16 GB machine a 14B coder
+model is noticeably better at this.
+
+In **agent** mode the model returns whole files in fenced blocks tagged with a
+path, and the runner writes them, then runs the suite and reports the result
+back into the chat:
+
+````
+```jsx path=src/App.jsx
+...whole file...
+```
+````
+
+It refuses to write a READ ONLY spec file, refuses any path containing `..` or
+an absolute path, and in plan mode the `chmod 444` guard makes the write fail
+anyway — three independent checks, because a model that is wrong about code will
+occasionally be wrong about paths.
+
+**Or drive it yourself.** Nothing requires `agent.py`. Any assistant that can
+read `state.json` and shell out to `say.py` can be the agent — that is how the
+harness was built in the first place.
+
+## A small local model is a feature here
+
+A 7B model will not solve these problems cleanly. It will produce plausible React
+with a stale dependency array, an index used as a key, a missing guard.
+
+That is the point. The skill being drilled is **reviewing agent output**, and a
+weaker agent generates more of the defects worth catching. Use a frontier model
+when you want the answer; use a small local one when you want the practice.
+
 ## Adding a problem
 
 Drop a folder into `problems/`. It appears in the switcher on the next poll — no
