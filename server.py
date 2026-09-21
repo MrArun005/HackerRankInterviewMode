@@ -43,6 +43,14 @@ def problem_ids():
         return []
 
 
+DIFFICULTIES = ("easy", "medium", "hard")
+
+
+def difficulty_of(pid):
+    d = (meta_of(pid).get("difficulty") or "").lower()
+    return d if d in DIFFICULTIES else "medium"
+
+
 def title_of(pid):
     try:
         with open(os.path.join(PROBLEMS, pid, "meta.json"), encoding="utf-8") as f:
@@ -312,11 +320,15 @@ def editable_files(pid):
     root = os.path.join(PROBLEMS, pid)
     if kind_of(pid) != "vite":
         return [app_path(pid)]
+    # meta.json and ticket.md define the problem; they are not the candidate's
+    # workspace, so a plan turn has no reason to lock them.
+    NOT_WORKSPACE = {"meta.json", "ticket.md"}
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
         for name in filenames:
-            if name.rsplit(".", 1)[-1] in TEXT_EXT and name not in IGNORE_FILES:
+            if (name.rsplit(".", 1)[-1] in TEXT_EXT
+                    and name not in IGNORE_FILES and name not in NOT_WORKSPACE):
                 out.append(os.path.join(dirpath, name))
     return out
 
@@ -505,6 +517,7 @@ class H(BaseHTTPRequestHandler):
                 "stalled": slot.get("stalled", False),
                 "problems": [{"id": i, "title": title_of(i),
                               "count": len(s["problems"][i]["messages"]),
+                              "difficulty": difficulty_of(i),
                               "test": s["problems"][i].get("test")}
                              for i in problem_ids()],
             })

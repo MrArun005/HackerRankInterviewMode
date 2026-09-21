@@ -89,15 +89,21 @@
   kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;
       border-radius:5px;padding:1px 5px;color:var(--muted);background:var(--panel)}
   /* ---------- layout ---------- */
+  /* Explicit column placement. Without it, display:none on .side pulls the
+     other two panes one column left and the chat lands in the 0-width slot. */
   .wrap{flex:1;display:grid;grid-template-columns:216px minmax(360px,32%) 1fr;min-height:0}
-  .wrap.collapsed{grid-template-columns:0 minmax(400px,36%) 1fr}
+  .side{grid-column:1} .chat{grid-column:2} .work{grid-column:3}
+  .wrap.collapsed{grid-template-columns:0 minmax(400px,38%) 1fr}
   .wrap.collapsed .side{display:none}
-  @media (max-width:1100px){.wrap{grid-template-columns:0 minmax(340px,38%) 1fr}
-                            .wrap .side{display:none}
-                            .wrap.collapsed{grid-template-columns:216px minmax(340px,38%) 1fr}
-                            .wrap.collapsed .side{display:block}}
-  @media (max-width:820px){.wrap,.wrap.collapsed{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
-                           .wrap .side,.wrap.collapsed .side{display:none}}
+  @media (max-width:1080px){
+    .wrap{grid-template-columns:0 minmax(340px,40%) 1fr}
+    .wrap .side{display:none}
+  }
+  @media (max-width:820px){
+    .wrap,.wrap.collapsed{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+    .wrap .side,.wrap.collapsed .side{display:none}
+    .chat{grid-column:1} .work{grid-column:1}
+  }
   .side{border-right:1px solid var(--line);overflow-y:auto;padding:14px 10px;background:var(--bg)}
   .side h4{font:500 10.5px/1 var(--sans);text-transform:uppercase;letter-spacing:.09em;
            color:var(--muted);margin:4px 8px 10px}
@@ -114,6 +120,12 @@
   .pname{display:block;font-size:13px;color:var(--fg);line-height:1.35}
   .pmeta{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);
          opacity:.8;margin-top:3px}
+  .lvl{display:flex;align-items:baseline;justify-content:space-between;
+       margin:14px 9px 5px;font:500 10px/1 var(--sans);text-transform:uppercase;
+       letter-spacing:.1em}
+  .lvl:first-child{margin-top:2px}
+  .lvl.easy{color:var(--pass)} .lvl.medium{color:var(--agent)} .lvl.hard{color:var(--fail)}
+  .lvlN{font-family:var(--mono);font-size:10px;opacity:.55;letter-spacing:0}
   .sideFoot{margin:14px 9px 0;padding-top:12px;border-top:1px solid var(--line);
             font-family:var(--mono);font-size:10.5px;color:var(--muted);opacity:.75}
   .iconBtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:7px;
@@ -559,7 +571,7 @@ async function refresh(){
     reloadFrame();
     if(!$("ticket").classList.contains("hidden")) loadTicket();
   }
-  paintProblems(s.problems||[], s.current);
+  paintProblems(s.problems||[], s.current); paintFoot(s.problems||[]);
   render(s);
   if(s.fileVersion!==lastVersion){
     if(lastVersion!==-1){
@@ -934,9 +946,26 @@ async function loadTicket(){
 /* ---------- problem switcher ---------- */
 let CURRENT=null;
 
+const LEVELS=["easy","medium","hard"];
+
 function paintProblems(list,current){
   const box=$("probs"); box.innerHTML="";
-  list.forEach(pr=>{
+  const groups={easy:[],medium:[],hard:[]};
+  list.forEach(p=>(groups[p.difficulty]||groups.medium).push(p));
+
+  LEVELS.forEach(level=>{
+    const items=groups[level];
+    if(!items.length) return;
+    const h=document.createElement("div");
+    h.className="lvl "+level;
+    h.innerHTML='<span>'+level+'</span><span class="lvlN">'+items.length+'</span>';
+    box.appendChild(h);
+    items.forEach(pr=>row(box,pr,current));
+  });
+}
+
+function row(box,pr,current){
+  {
     const b=document.createElement("button");
     b.className="probRow";
     b.setAttribute("aria-current", pr.id===current);
@@ -949,7 +978,10 @@ function paintProblems(list,current){
     b.title=pr.id;
     b.onclick=()=>switchTo(pr.id);
     box.appendChild(b);
-  });
+  }
+}
+
+function paintFoot(list){
   const done=list.filter(p=>p.test && p.test.total && p.test.passed===p.test.total).length;
   $("sideFoot").textContent = done+" of "+list.length+" green";
 }
