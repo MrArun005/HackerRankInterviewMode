@@ -51,14 +51,40 @@ Two formats, both supported:
   `src/`. Built to `dist/` and served by the harness; tests run through
   `vitest --reporter=json` and render per-case in the Tests pane.
 
-Shipped problems:
+Thirty problems, graded easy → hard:
 
-| | | |
-|---|---|---|
-| 01 | Task Manager | single-file · filters, counter, pluralisation |
-| 02 | Employee Directory | single-file · async, pagination, empty vs no-match |
-| 03 | Directory (Vite) | multi-file · hook + components, 9 tests |
-| 04 | Debounced Search | multi-file · debounce, cancellation, **stale-response race** |
+| # | Problem | Level | Tests |
+|---|---|---|---|
+| 01 | Task Manager | easy | 0 |
+| 07 | Counter with Step | easy | 7 |
+| 08 | Star Rating | easy | 6 |
+| 09 | Accordion | easy | 5 |
+| 11 | Password Field | easy | 6 |
+| 12 | Tabs with Keyboard | easy | 6 |
+| 13 | Character Counter | easy | 6 |
+| 17 | Select All | easy | 6 |
+| 18 | Pagination Hook | easy | 6 |
+| 23 | Search Highlight | easy | 8 |
+| 24 | Toast Queue | easy | 7 |
+| 02 | Employee Directory | medium | 0 |
+| 03 | Directory Table | medium | 9 |
+| 05 | Leave Form (TS) | medium | 9 |
+| 10 | Cart Totals | medium | 8 |
+| 14 | Sortable Table | medium | 8 |
+| 15 | Delete with Undo | medium | 5 |
+| 19 | Modal Focus Trap | medium | 6 |
+| 20 | Currency Input | medium | 8 |
+| 21 | Filter Chips | medium | 9 |
+| 25 | Dependent Selects | medium | 7 |
+| 26 | Date Range | medium | 11 |
+| 27 | Form Wizard | medium | 6 |
+| 28 | Expandable Tree | medium | 6 |
+| 04 | Debounced Search | hard | 8 |
+| 06 | Optimistic Approvals | hard | 6 |
+| 16 | Poll Until Done | hard | 6 |
+| 22 | Retry with Backoff | hard | 7 |
+| 29 | Virtual Window | hard | 8 |
+| 30 | Stale While Revalidate | hard | 7 |
 
 Each ships with a deliberate trap. Problem 02's ticket specifies an error message
 the tests contradict; problem 04's ticket says nothing about concurrent requests,
