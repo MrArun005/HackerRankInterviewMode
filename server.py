@@ -171,6 +171,14 @@ def pkg_name(pid):
         return ""
 
 
+def has_script(pid, name):
+    try:
+        with open(os.path.join(PROBLEMS, pid, "package.json"), encoding="utf-8") as f:
+            return name in (json.load(f).get("scripts") or {})
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
 def npm(pid, *args, timeout=240):
     """Run npm for one workspace from the repo root. Returns (ok, output)."""
     name = pkg_name(pid)
@@ -496,7 +504,8 @@ class H(BaseHTTPRequestHandler):
                 "pending": slot["pending"],
                 "stalled": slot.get("stalled", False),
                 "problems": [{"id": i, "title": title_of(i),
-                              "count": len(s["problems"][i]["messages"])}
+                              "count": len(s["problems"][i]["messages"]),
+                              "test": s["problems"][i].get("test")}
                              for i in problem_ids()],
             })
         if p == "/api/files":
@@ -581,6 +590,28 @@ class H(BaseHTTPRequestHandler):
 
         if self.path == "/api/run":
             pid = s_cur()
+
+            # A typed problem gates on tsc first. Run it separately so a type
+            # error surfaces as a result instead of "no result.json produced".
+            if has_script(pid, "typecheck"):
+                ok, out = npm(pid, "run", "typecheck")
+                if not ok:
+                    lines = [l for l in ANSI_RE.sub("", out).splitlines()
+                             if "error TS" in l]
+                    summary = {"passed": 0, "total": 1, "ts": time.time(), "cases": [{
+                        "title": "typecheck — tsc --noEmit",
+                        "status": "failed",
+                        "message": lines[0][:220] if lines else "typecheck failed",
+                        "detail": "\n".join(lines)[:4000] or out[-4000:],
+                    }]}
+                    with state_lock():
+                        st = read_state()
+                        slot = st["problems"].setdefault(
+                            pid, {"messages": [], "pending": False})
+                        slot["test"] = summary
+                        write_state(st)
+                    return send_json(self, {"ok": True, **summary})
+
             npm(pid, "test")                 # exit code is 1 on failures; ignore it
             summary = vitest_summary(pid)
             if summary is None:

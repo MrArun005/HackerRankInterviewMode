@@ -57,15 +57,6 @@
     background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:3px 8px;
   }
   .spacer{flex:1}
-  .probs{display:flex;gap:4px;align-items:center}
-  .probs button{
-    background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;
-    padding:4px 11px;font:inherit;font-size:12.5px;cursor:pointer;transition:.13s;
-    display:flex;align-items:center;gap:7px
-  }
-  .probs button:hover{color:var(--fg);border-color:var(--accent)}
-  .probs button[aria-current="true"]{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-  .probs .num{font-family:var(--mono);font-size:11px;opacity:.65}
   .themeBtn{
     background:var(--panel);border:1px solid var(--line);color:var(--muted);
     border-radius:8px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer;
@@ -73,10 +64,6 @@
   }
   .themeBtn:hover{color:var(--fg);border-color:var(--accent)}
   .themeBtn .ico{font-size:13px;line-height:1}
-  .probs .badge{
-    font-family:var(--mono);font-size:10px;background:var(--panel2);border-radius:999px;
-    padding:0 5px;color:var(--muted)
-  }
   .ticket{
     height:100%;overflow:auto;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;box-shadow:var(--shadow);padding:26px 30px
@@ -102,8 +89,36 @@
   kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;
       border-radius:5px;padding:1px 5px;color:var(--muted);background:var(--panel)}
   /* ---------- layout ---------- */
-  .wrap{flex:1;display:grid;grid-template-columns:minmax(400px,36%) 1fr;min-height:0}
-  @media (max-width:980px){.wrap{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+  .wrap{flex:1;display:grid;grid-template-columns:216px minmax(360px,32%) 1fr;min-height:0}
+  .wrap.collapsed{grid-template-columns:0 minmax(400px,36%) 1fr}
+  .wrap.collapsed .side{display:none}
+  @media (max-width:1100px){.wrap{grid-template-columns:0 minmax(340px,38%) 1fr}
+                            .wrap .side{display:none}
+                            .wrap.collapsed{grid-template-columns:216px minmax(340px,38%) 1fr}
+                            .wrap.collapsed .side{display:block}}
+  @media (max-width:820px){.wrap,.wrap.collapsed{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+                           .wrap .side,.wrap.collapsed .side{display:none}}
+  .side{border-right:1px solid var(--line);overflow-y:auto;padding:14px 10px;background:var(--bg)}
+  .side h4{font:500 10.5px/1 var(--sans);text-transform:uppercase;letter-spacing:.09em;
+           color:var(--muted);margin:4px 8px 10px}
+  .probRow{
+    display:grid;grid-template-columns:14px 1fr;gap:9px;align-items:start;
+    width:100%;text-align:left;background:none;border:0;border-radius:8px;
+    padding:8px 9px;cursor:pointer;color:var(--muted);font:inherit;transition:.12s
+  }
+  .probRow:hover{background:var(--panel2);color:var(--fg)}
+  .probRow[aria-current="true"]{background:var(--accent-soft)}
+  .probRow[aria-current="true"] .pname{color:var(--accent);font-weight:500}
+  .probRow .dot{width:7px;height:7px;border-radius:50%;margin-top:6px;background:var(--line)}
+  .probRow .dot.green{background:var(--pass)} .probRow .dot.red{background:var(--fail)}
+  .pname{display:block;font-size:13px;color:var(--fg);line-height:1.35}
+  .pmeta{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);
+         opacity:.8;margin-top:3px}
+  .sideFoot{margin:14px 9px 0;padding-top:12px;border-top:1px solid var(--line);
+            font-family:var(--mono);font-size:10.5px;color:var(--muted);opacity:.75}
+  .iconBtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:7px;
+           padding:4px 9px;font-size:13px;cursor:pointer;line-height:1.2}
+  .iconBtn:hover{color:var(--fg);border-color:var(--accent)}
   .chat{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line)}
   .work{display:flex;flex-direction:column;min-height:0;background:var(--panel2)}
   /* ---------- chat ---------- */
@@ -367,7 +382,7 @@
 <div class="top">
   <span class="mark">✳</span>
   <span class="title">Agent Editor</span>
-  <span class="probs" id="probs"></span>
+  <button class="iconBtn" id="sideToggle" title="Problems (⌘B)" aria-label="Toggle problem list">☰</button>
   <span class="spacer"></span>
   <span class="file" id="fname">app.html</span>
   <span class="lockPill hidden" id="lock" title="Plan mode: the workspace file is read-only on disk">locked</span>
@@ -379,6 +394,11 @@
 </div>
 
 <div class="wrap">
+  <nav class="side" id="side" aria-label="Problems">
+    <h4>problems</h4>
+    <div id="probs"></div>
+    <div class="sideFoot" id="sideFoot"></div>
+  </nav>
   <div class="chat">
     <div class="log" id="log"></div>
     <div class="composer">
@@ -918,14 +938,20 @@ function paintProblems(list,current){
   const box=$("probs"); box.innerHTML="";
   list.forEach(pr=>{
     const b=document.createElement("button");
+    b.className="probRow";
     b.setAttribute("aria-current", pr.id===current);
-    const num=pr.id.split("-")[0];
-    b.innerHTML='<span class="num">'+num+'</span>'+escapeHtml(pr.title)
-      +(pr.count?'<span class="badge">'+pr.count+'</span>':"");
+    const t=pr.test;
+    const cls = !t ? "" : (t.total && t.passed===t.total ? " green" : " red");
+    const score = t ? t.passed+"/"+t.total : "not run";
+    b.innerHTML='<span class="dot'+cls+'"></span><span>'
+      + '<span class="pname">'+pr.id.split("-")[0]+'  '+escapeHtml(pr.title)+'</span>'
+      + '<span class="pmeta">'+score+(pr.count?"  ·  "+pr.count+" msg":"")+'</span></span>';
     b.title=pr.id;
     b.onclick=()=>switchTo(pr.id);
     box.appendChild(b);
   });
+  const done=list.filter(p=>p.test && p.test.total && p.test.passed===p.test.total).length;
+  $("sideFoot").textContent = done+" of "+list.length+" green";
 }
 
 async function switchTo(id){
@@ -961,6 +987,16 @@ $("theme").onclick=()=>{
   applyTheme();
 };
 
+
+const wrap=document.querySelector(".wrap");
+$("sideToggle").onclick=()=>{
+  const c=wrap.classList.toggle("collapsed");
+  try{ localStorage.setItem("ae-side", c?"1":"0"); }catch(e){}
+};
+try{ if(localStorage.getItem("ae-side")==="1") wrap.classList.add("collapsed"); }catch(e){}
+addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="b"){ e.preventDefault(); $("sideToggle").click(); }
+});
 
 theme=readTheme(); applyTheme();
 setMode("plan"); poll(); $("input").focus();
