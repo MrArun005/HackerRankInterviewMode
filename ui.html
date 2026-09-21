@@ -116,6 +116,8 @@
     text-transform:uppercase;font-weight:500;border:1px solid transparent
   }
   .pill.plan{color:var(--accent);background:var(--accent-soft)}
+  .pill.ship{color:var(--pass);border-color:var(--pass)}
+  .pill.hold{color:var(--fail);border-color:var(--fail)}
   .pill.agent{color:var(--agent);border-color:var(--line);background:var(--panel2)}
   .msg.user .body{
     background:var(--panel);border:1px solid var(--line);border-radius:12px;
@@ -197,6 +199,24 @@
   .difftable tr.hunk td{color:var(--accent);background:var(--panel2)}
   .difftable tr.meta td{color:var(--muted);opacity:.7}
   .none{color:var(--muted);padding:18px 20px;margin:0;font-size:13.5px}
+  .review{flex:0 0 auto;border-top:1px solid var(--line);background:var(--panel2);padding:14px 18px 16px}
+  .reviewHead{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .reviewHead b{font:500 13px/1 var(--sans)}
+  .testPill{font-family:var(--mono);font-size:11px;border:1px solid var(--line);
+            border-radius:999px;padding:2px 9px;color:var(--muted)}
+  .testPill.green{color:var(--pass);border-color:var(--pass)}
+  .testPill.red{color:var(--fail);border-color:var(--fail)}
+  .qs{margin:0 0 10px;padding-left:20px;font-size:13px;color:var(--muted)}
+  .qs li{margin:3px 0}
+  #reviewNote{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+              color:var(--fg);font:inherit;font-size:13.5px;padding:8px 10px;resize:vertical}
+  #reviewNote:focus{outline:none;border-color:var(--accent)}
+  .reviewBtns{display:flex;align-items:center;gap:8px;margin-top:9px}
+  .ship{background:var(--pass);border:0;color:#fff;font-weight:500;border-radius:8px;padding:6px 14px;cursor:pointer}
+  .ship:disabled{opacity:.35;cursor:not-allowed}
+  .hold{background:var(--panel);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:6px 14px;cursor:pointer}
+  #reviewLog{margin-top:10px;font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+  #reviewLog div{margin:2px 0}
   .lockPill{
     border:1px solid var(--accent);color:var(--accent);background:var(--accent-soft);
     border-radius:999px;padding:2px 9px;font-size:10.5px;letter-spacing:.06em;
@@ -346,6 +366,24 @@
             <span class="grow"></span>
           </div>
           <div class="code" id="diffBody"></div>
+          <div class="review" id="review">
+            <div class="reviewHead">
+              <b>Review gate</b>
+              <span class="testPill" id="testPill">tests not run</span>
+            </div>
+            <ol class="qs">
+              <li>Is this the smallest change that makes the tests pass — and can you defend every line you kept?</li>
+              <li>What does this break that no test covers?</li>
+              <li>What would you have to add next for a latent bug here to become a real one?</li>
+            </ol>
+            <textarea id="reviewNote" rows="2" placeholder="Your answer, or what you'd send back…"></textarea>
+            <div class="reviewBtns">
+              <button class="ship" id="btnShip" disabled>Ship it</button>
+              <button class="hold" id="btnHold">Send back</button>
+              <span class="hint" id="reviewHint"></span>
+            </div>
+            <div id="reviewLog"></div>
+          </div>
         </div>
       </div>
       <div class="ticket hidden" id="ticket" role="tabpanel" aria-labelledby="tTick"><div class="inner" id="ticketBody"></div></div>
@@ -395,7 +433,8 @@ function render(state){
     const d=document.createElement("div");
     d.className="msg "+m.role;
     const md = escapeHtml(String(m.mode||"plan"));
-    d.innerHTML='<div class="who"><b>'+(m.role==="user"?"You":"Claude")+'</b>'
+    const who = m.role==="user" ? "You" : m.role==="review" ? "Review" : "Claude";
+    d.innerHTML='<div class="who"><b>'+who+'</b>'
       +'<span class="pill '+md+'">'+md+'</span></div>'
       +'<div class="body">'+(m.role==="user"?escapeHtml(m.text):marked.parse(m.text))+'</div>';
     log.appendChild(d);
@@ -430,6 +469,7 @@ async function refresh(){
   }
   $("fname").textContent=s.file||"app.html";
   $("lock").classList.toggle("hidden", !s.locked);
+  TEST=s.test||null; REVIEWS=s.reviews||[]; paintReview();
   return s;
 }
 
@@ -601,6 +641,53 @@ function paintDiff(text){
   $("diffStat").innerHTML='<span class="plus">+'+add+'</span> <span class="minus">-'+del+'</span>';
   $("diffBody").innerHTML='<table class="difftable">'+rows.join("")+'</table>';
 }
+
+/* ---------- review gate ---------- */
+let TEST=null, REVIEWS=[];
+
+// The sandboxed preview cannot reach the server itself (opaque origin), so it
+// posts its result up and we forward it. Shape-checked, not origin-checked:
+// a sandboxed frame has no usable origin to check against.
+addEventListener("message", (e) => {
+  const d = e.data;
+  if (!d || d.type !== "ae-test") return;
+  const passed = Number(d.passed), total = Number(d.total);
+  if (!Number.isFinite(passed) || !Number.isFinite(total)) return;
+  fetch("/api/testresult", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ passed, total }),
+  }).then(refresh).catch(() => {});
+});
+
+function paintReview(){
+  const pill=$("testPill"), ship=$("btnShip");
+  if(!TEST){
+    pill.className="testPill"; pill.textContent="tests not run";
+  }else{
+    const green = TEST.total>0 && TEST.passed===TEST.total;
+    pill.className="testPill "+(green?"green":"red");
+    pill.textContent=TEST.passed+" / "+TEST.total+" passing";
+  }
+  const green = TEST && TEST.total>0 && TEST.passed===TEST.total;
+  ship.disabled = !green;
+  $("reviewHint").textContent = green ? "" : "Ship is locked until the suite is green.";
+  $("reviewLog").innerHTML = REVIEWS.slice(-4).map(r=>
+    '<div>'+(r.verdict==="ship"?"shipped":"sent back")
+    +(r.sha?" @"+escapeHtml(r.sha):"")
+    +(r.test?"  "+r.test.passed+"/"+r.test.total:"")
+    +'</div>').join("");
+}
+
+async function review(verdict){
+  await fetch("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({verdict, note:$("reviewNote").value})});
+  $("reviewNote").value="";
+  lastCount=-1;                       // force the chat to repaint with the entry
+  await refresh();
+  loadDiff("");
+}
+$("btnShip").onclick=()=>review("ship");
+$("btnHold").onclick=()=>review("hold");
 
 async function loadTicket(){
   const r=await (await fetch("/api/ticket",{cache:"no-store"})).json();

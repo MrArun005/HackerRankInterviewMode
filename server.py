@@ -285,6 +285,8 @@ class H(BaseHTTPRequestHandler):
                 "file": "problems/%s/app.html" % cur,
                 "fileVersion": file_version(cur),
                 "locked": not is_writable(cur),
+                "test": slot.get("test"),
+                "reviews": slot.get("reviews", []),
                 "messages": slot["messages"],
                 "pending": slot["pending"],
                 "stalled": slot.get("stalled", False),
@@ -330,6 +332,41 @@ class H(BaseHTTPRequestHandler):
                 slot.pop("pendingSince", None)
                 write_state(s)
             print("\n--- unstuck %s ---\n" % s["current"], flush=True)
+            return send_json(self, {"ok": True})
+
+        if self.path == "/api/testresult":
+            try:
+                passed, total = int(msg.get("passed", 0)), int(msg.get("total", 0))
+            except (TypeError, ValueError):
+                return send_json(self, {"error": "bad numbers"}, 400)
+            with state_lock():
+                s = read_state()
+                slot = s["problems"].setdefault(
+                    s["current"], {"messages": [], "pending": False})
+                slot["test"] = {"passed": passed, "total": total, "ts": time.time()}
+                write_state(s)
+            return send_json(self, {"ok": True})
+
+        if self.path == "/api/review":
+            verdict = msg.get("verdict")
+            if verdict not in ("ship", "hold"):
+                return send_json(self, {"error": "verdict must be ship or hold"}, 400)
+            note = (msg.get("note") or "").strip()
+            with state_lock():
+                s = read_state()
+                cur = s["current"]
+                slot = s["problems"].setdefault(cur, {"messages": [], "pending": False})
+                sha = git("log", "-1", "--format=%h", "--", "problems/%s" % cur).strip()
+                entry = {"verdict": verdict, "note": note, "sha": sha,
+                         "test": slot.get("test"), "ts": time.time()}
+                slot.setdefault("reviews", []).append(entry)
+                slot["messages"].append({
+                    "role": "review", "mode": verdict, "ts": time.time(),
+                    "text": ("**Shipped**" if verdict == "ship" else "**Sent back**")
+                            + (" at `%s`" % sha if sha else "")
+                            + (("\n\n" + note) if note else "")})
+                write_state(s)
+            print("\n--- review: %s (%s) ---\n" % (verdict, cur), flush=True)
             return send_json(self, {"ok": True})
 
         if self.path == "/api/switch":

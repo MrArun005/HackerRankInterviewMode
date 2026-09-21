@@ -354,6 +354,17 @@ async function runTests() {
   const s = document.getElementById("summary");
   s.textContent = passed + " / " + TESTS.length + " passing";
   s.className = passed === TESTS.length ? "pass" : "fail";
+
+  // Tell the shell so the review gate knows whether this is reviewable.
+  // The preview is sandboxed without allow-same-origin, so its origin is
+  // opaque and fetch() to the server is CORS-blocked. Post up instead and
+  // let the parent, which is same-origin, do the write.
+  try {
+    if (window.parent !== window) {
+      window.parent.postMessage(
+        { type: "ae-test", passed: passed, total: TESTS.length }, "*");
+    }
+  } catch (e) { /* opened standalone; no shell to report to */ }
 }
 
 // The tests swap `api` out for doubles. React runs effects asynchronously, so a
