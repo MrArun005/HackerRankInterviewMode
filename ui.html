@@ -186,6 +186,30 @@
              background:#fff;box-shadow:var(--shadow)}
   iframe{width:100%;height:100%;border:0;display:block}
   /* ---------- source viewer ---------- */
+  /* ---------- file explorer ---------- */
+  .tree{padding:4px 0}
+  .tree .row{
+    display:flex;align-items:center;gap:6px;width:100%;text-align:left;
+    background:none;border:0;border-radius:6px;color:var(--muted);
+    font:inherit;font-size:13px;padding:4px 8px;cursor:pointer;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.1s
+  }
+  .tree .row:hover{background:var(--panel2);color:var(--fg)}
+  .tree .row[aria-current="true"]{background:var(--accent-soft);color:var(--accent);font-weight:500}
+  .tree .row.dir{color:var(--fg);font-weight:500}
+  .tree .chev{display:inline-block;width:10px;font-size:9px;opacity:.6;transition:transform .12s}
+  .tree .chev.open{transform:rotate(90deg)}
+  .tree .ico{width:16px;text-align:center;font:600 8px/1 var(--mono);
+             border-radius:3px;padding:3px 0;color:#fff;flex:0 0 auto}
+  .ico.jsx,.ico.js{background:#c2a23a} .ico.css{background:#4a7fc1}
+  .ico.json{background:#8a8a8a} .ico.html{background:#c26a3a}
+  .ico.md{background:#5a8a6a} .ico.other{background:#7a7772}
+  .tree .lines{margin-left:auto;font-family:var(--mono);font-size:10.5px;opacity:.45;padding-left:8px}
+  .tree .ro{font-size:9px;letter-spacing:.05em;color:var(--fail);opacity:.85;padding-left:6px}
+  .kids{padding-left:12px;border-left:1px solid var(--line);margin-left:13px}
+  .crumb{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .crumb b{color:var(--fg);font-weight:500}
+
   /* ---------- diff ---------- */
   .diffWrap{height:100%;display:grid;grid-template-columns:190px 1fr;gap:14px}
   @media (max-width:1180px){.diffWrap{grid-template-columns:150px 1fr}}
@@ -345,7 +369,7 @@
       <div class="frameWrap" id="frameWrap" role="tabpanel" aria-labelledby="tPrev"><iframe id="frame" src="about:blank" sandbox="allow-scripts"></iframe></div>
       <div class="srcWrap hidden" id="srcWrap" role="tabpanel" aria-labelledby="tCode">
         <div class="rail">
-          <h4>app.html</h4>
+          <h4 id="railRoot">explorer</h4>
           <div id="rail"></div>
         </div>
         <div class="srcMain">
@@ -459,7 +483,7 @@ async function refresh(){
   $("runTests").classList.toggle("hidden", KIND!=="vite");
   const switched = s.current!==CURRENT;
   if(switched){
-    CURRENT=s.current; lastSig=""; lastVersion=-1; sel=null;
+    CURRENT=s.current; lastSig=""; lastVersion=-1; CURFILE=null;
     reloadFrame();
     if(!$("ticket").classList.contains("hidden")) loadTicket();
   }
@@ -498,6 +522,7 @@ $("unstick").onclick=async()=>{
 let KIND="single", BUILT=false;
 
 function reloadFrame(){
+  if(!CURRENT) return;        // boot: applyTheme() runs before the first state arrives
   const t = "theme="+theme+"&t="+Date.now();
   $("frame").src = KIND==="vite"
     ? (BUILT ? "/preview/"+CURRENT+"/index.html?"+t : "about:blank")
@@ -532,72 +557,116 @@ $("input").addEventListener("keydown",e=>{
 function autosize(){const t=$("input");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,230)+"px";}
 $("input").addEventListener("input",autosize);
 
-/* ---------- source viewer ---------- */
-let SRC="", REGIONS=[], sel=null;
+/* ---------- source viewer: explorer + one file at a time ---------- */
+let TREE=[], OPEN={}, CURFILE=null, SRC="", FILE_RO=false;
+
+const ICO = (name) => {
+  const e = name.split(".").pop();
+  return ["jsx","js","css","json","html","md"].includes(e) ? e : "other";
+};
 
 async function loadSource(keep){
-  const r=await (await fetch("/api/source",{cache:"no-store"})).json();
-  SRC=r.source||"";
-  REGIONS=(r.regions||[]).concat([{name:"Whole file",start:0,end:SRC.split("\n").length}]);
-  if(sel===null||!keep||sel>=REGIONS.length) sel=pickDefault();
-  paintRail(); paintCode();
+  const r = await (await fetch("/api/files",{cache:"no-store"})).json();
+  TREE = r.tree || [];
+  $("railRoot").textContent = (r.root||"").split("/").pop() || "explorer";
+  if(!keep || !CURFILE || !findFile(TREE, CURFILE)) CURFILE = pickDefault(TREE);
+  paintTree();
+  if(CURFILE) await openFile(CURFILE);
 }
 
-// default to the editable region, not the 200 lines of CSS above it
-function pickDefault(){
-  const i=REGIONS.findIndex(r=>/your code/i.test(r.name));
-  return i>=0?i:0;
+function findFile(nodes, path){
+  for(const n of nodes){
+    if(n.type==="file" && n.path===path) return n;
+    if(n.children){ const hit=findFile(n.children,path); if(hit) return hit; }
+  }
+  return null;
 }
 
-function paintRail(){
-  const rail=$("rail"); rail.innerHTML="";
-  REGIONS.forEach((r,i)=>{
-    const b=document.createElement("button");
-    b.setAttribute("aria-current", i===sel);
-    b.innerHTML=short(r.name)+'<span class="n">'+(r.end-r.start)+'</span>';
-    b.title=r.name;
-    b.onclick=()=>{sel=i;paintRail();paintCode();};
-    rail.appendChild(b);
-  });
+// open on the file you would actually edit, not the first one alphabetically
+function pickDefault(nodes){
+  const flat=[];
+  (function walk(ns){ ns.forEach(n=> n.type==="file" ? flat.push(n) : walk(n.children||[])); })(nodes);
+  const pref = flat.find(f=>/App\.(jsx|tsx|js|html)$/.test(f.name) && !f.readOnly)
+            || flat.find(f=>!f.readOnly && /\.(jsx|tsx|js|html)$/.test(f.name))
+            || flat[0];
+  return pref ? pref.path : null;
 }
 
-function short(n){
-  return n.replace(/\s*[—-]\s*.*$/,"")       // drop the trailing explanation
-          .replace(/\bREAD ONLY\b/i,"").trim() || n;
+function paintTree(){
+  const rail=$("rail");
+  rail.innerHTML="";
+  rail.appendChild(renderNodes(TREE));
 }
 
-function paintCode(){
-  const r=REGIONS[sel]; if(!r) return;
-  const lines=SRC.split("\n").slice(r.start,r.end);
-  const text=lines.join("\n");
-  const lang=/tests|your code|seed/i.test(r.name)?"javascript":"xml";
+function renderNodes(nodes){
+  const box=document.createElement("div");
+  box.className="tree";
+  for(const n of nodes){
+    if(n.type==="dir"){
+      const open = OPEN[n.path] !== false;            // folders start expanded
+      const b=document.createElement("button");
+      b.className="row dir";
+      b.innerHTML='<span class="chev'+(open?" open":"")+'">&#9654;</span>'+escapeHtml(n.name);
+      b.onclick=()=>{ OPEN[n.path]=!open; paintTree(); };
+      box.appendChild(b);
+      if(open){
+        const kids=renderNodes(n.children||[]);
+        kids.classList.add("kids");
+        box.appendChild(kids);
+      }
+    } else {
+      const b=document.createElement("button");
+      b.className="row";
+      b.setAttribute("aria-current", n.path===CURFILE);
+      b.innerHTML='<span class="ico '+ICO(n.name)+'">'+ICO(n.name).slice(0,3).toUpperCase()+'</span>'
+        +escapeHtml(n.name)
+        +(n.readOnly?'<span class="ro">RO</span>':"")
+        +'<span class="lines">'+n.lines+'</span>';
+      b.title=n.path;
+      b.onclick=()=>openFile(n.path);
+      box.appendChild(b);
+    }
+  }
+  return box;
+}
 
+async function openFile(path){
+  const r = await (await fetch("/api/file?path="+encodeURIComponent(path),{cache:"no-store"})).json();
+  if(r.error) return;
+  CURFILE=path; SRC=r.source||""; FILE_RO=!!r.readOnly;
+  paintTree();
+  const parts=path.split("/");
+  $("srcLbl").innerHTML='<span class="crumb">'
+    + parts.slice(0,-1).map(escapeHtml).join(" / ")
+    + (parts.length>1?" / ":"") + "<b>"+escapeHtml(parts[parts.length-1])+"</b></span>";
+  $("srcRo").classList.toggle("hidden", !FILE_RO);
+  paintCode(SRC, r.lang);
+}
+
+function paintCode(text, lang){
+  const map={jsx:"javascript",js:"javascript",ts:"typescript",tsx:"typescript",
+             css:"css",html:"xml",json:"json",md:"markdown"};
   let html;
-  try{ html=hljs.highlight(text,{language:lang,ignoreIllegals:true}).value; }
+  try{ html=hljs.highlight(text,{language:map[lang]||"javascript",ignoreIllegals:true}).value; }
   catch(e){ html=escapeHtml(text); }
 
-  // split the highlighted markup per line, reopening spans that cross lines
   const rows=[]; const open=[];
   html.split("\n").forEach((ln,i)=>{
     const prefix=open.map(o=>'<span class="'+o+'">').join("");
     const re=/<span class="([^"]+)">|<\/span>/g; let m;
     while((m=re.exec(ln))!==null){ m[1]?open.push(m[1]):open.pop(); }
-    const suffix="</span>".repeat(open.length);
-    rows.push('<tr><td class="ln">'+(r.start+i+1)+'</td><td class="tx">'
-      +prefix+ln+suffix+'</td></tr>');
+    rows.push('<tr><td class="ln">'+(i+1)+'</td><td class="tx">'
+      +prefix+ln+"</span>".repeat(open.length)+'</td></tr>');
   });
-
   $("code").innerHTML='<table>'+rows.join("")+'</table>';
-  $("srcLbl").textContent=r.name;
-  $("srcRo").classList.toggle("hidden", !/read only/i.test(r.name));
   $("code").scrollTop=0;
 }
 
 $("copy").onclick=async()=>{
-  const r=REGIONS[sel];
-  await navigator.clipboard.writeText(SRC.split("\n").slice(r.start,r.end).join("\n"));
+  await navigator.clipboard.writeText(SRC);
   $("copy").textContent="Copied"; setTimeout(()=>$("copy").textContent="Copy",1200);
 };
+
 
 const PANES={tPrev:"frameWrap", tCode:"srcWrap", tDiff:"diff", tTick:"ticket"};
 const srcOpen=()=>!$("srcWrap").classList.contains("hidden");
@@ -745,7 +814,7 @@ async function switchTo(id){
   if(id===CURRENT) return;
   await fetch("/api/switch",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({id})});
-  sel=null;                      // reset the source rail for the new file
+  CURFILE=null;                  // reset the explorer for the new problem
   lastCount=-1;                  // force a chat repaint
   await refresh();
 }

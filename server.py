@@ -204,6 +204,53 @@ def vitest_summary(pid):
             "cases": cases, "ts": time.time()}
 
 
+IGNORE_DIRS  = {"node_modules", "dist", ".git", "__pycache__", ".vite"}
+IGNORE_FILES = {"result.json", "package-lock.json", ".DS_Store"}
+TEXT_EXT = {"js", "jsx", "ts", "tsx", "css", "html", "json", "md", "txt", "svg"}
+
+
+def is_readonly_path(rel):
+    """The spec is read-only. Everything else in the project is fair game."""
+    base = os.path.basename(rel)
+    return ".test." in base or base == "setupTests.js"
+
+
+def build_tree(root, rel=""):
+    """Nested dirs-then-files listing, for the explorer."""
+    here = os.path.join(root, rel)
+    try:
+        names = sorted(os.listdir(here))
+    except OSError:
+        return []
+    dirs, files = [], []
+    for name in names:
+        if name.startswith(".") or name in IGNORE_FILES or name in IGNORE_DIRS:
+            continue
+        child = os.path.join(rel, name) if rel else name
+        full = os.path.join(root, child)
+        if os.path.isdir(full):
+            kids = build_tree(root, child)
+            if kids:
+                dirs.append({"name": name, "type": "dir", "path": child, "children": kids})
+        elif name.rsplit(".", 1)[-1] in TEXT_EXT:
+            try:
+                n = sum(1 for _ in open(full, encoding="utf-8", errors="replace"))
+            except OSError:
+                n = 0
+            files.append({"name": name, "type": "file", "path": child,
+                          "lines": n, "readOnly": is_readonly_path(child)})
+    return dirs + files
+
+
+def safe_join(pid, rel):
+    """Resolve a repo-relative path inside one problem, refusing escapes."""
+    base = os.path.realpath(os.path.join(PROBLEMS, pid))
+    target = os.path.realpath(os.path.join(base, rel))
+    if target != base and not target.startswith(base + os.sep):
+        return None
+    return target
+
+
 def s_cur():
     with state_lock():
         return read_state()["current"]
@@ -385,6 +432,28 @@ class H(BaseHTTPRequestHandler):
                               "count": len(s["problems"][i]["messages"])}
                              for i in problem_ids()],
             })
+        if p == "/api/files":
+            return send_json(self, {
+                "root": "problems/%s" % cur,
+                "kind": kind_of(cur),
+                "tree": build_tree(os.path.join(PROBLEMS, cur)),
+            })
+
+        if p == "/api/file":
+            rel = ""
+            if "path=" in self.path:
+                from urllib.parse import unquote
+                rel = unquote((self.path.split("path=", 1)[1]).split("&")[0])
+            target = safe_join(cur, rel)
+            if not target or not os.path.isfile(target):
+                return send_json(self, {"error": "not found"}, 404)
+            return send_json(self, {
+                "path": rel,
+                "source": read_text(target),
+                "readOnly": is_readonly_path(rel),
+                "lang": rel.rsplit(".", 1)[-1],
+            })
+
         if p == "/api/source":
             if kind_of(cur) == "vite":
                 src, regs, line = [], [], 0
