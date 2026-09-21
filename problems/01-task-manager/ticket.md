@@ -11,4 +11,5 @@ Complete a React task manager application in order to pass all the unit tests.
 
 **Read only:** the TESTS block.
 
-> Status: solved, 6/6, plus a delete button that isn't in the spec.
+> The ticket says "N remaining". The tests have different wording, and an
+> opinion about the singular. Read them.

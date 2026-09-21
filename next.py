@@ -14,6 +14,8 @@ Reply with:
 import json, os, sys, time
 
 HERE     = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from common import is_readonly            # one copy, shared
 STATE    = os.path.join(HERE, "state.json")
 PROBLEMS = os.path.join(HERE, "problems")
 
@@ -29,9 +31,6 @@ def read_state():
         return {"problems": {}}
 
 
-def is_readonly(rel):
-    base = os.path.basename(rel)
-    return ".test." in base or base == "setupTests.js"
 
 
 def pending():

@@ -113,11 +113,16 @@ def write_state(s):
 
 
 def file_version(pid):
-    """Derived from the problem's app.html mtime, so nothing has to be bumped."""
-    try:
-        return os.stat(app_path(pid)).st_mtime_ns // 1_000_000
-    except (FileNotFoundError, OSError):
-        return 0
+    """Newest source mtime in the problem. It used to stat app.html only, which
+    exists in two problems out of thirty-one - so every vite problem reported
+    version 0 forever and the UI never refreshed after an agent write."""
+    newest = 0
+    for path in editable_files(pid):
+        try:
+            newest = max(newest, os.stat(path).st_mtime_ns)
+        except OSError:
+            continue
+    return newest // 1_000_000
 
 
 def git(*args):
@@ -247,7 +252,7 @@ TEXT_EXT = {"js", "jsx", "ts", "tsx", "css", "html", "json", "md", "txt", "svg"}
 def is_readonly_path(rel):
     """The spec is read-only. Everything else in the project is fair game."""
     base = os.path.basename(rel)
-    return ".test." in base or base == "setupTests.js"
+    return ".test." in base or base.startswith("setupTests.")
 
 
 def build_tree(root, rel=""):
@@ -684,6 +689,13 @@ class H(BaseHTTPRequestHandler):
                 s = read_state()
                 cur = s["current"]
                 slot = s["problems"].setdefault(cur, {"messages": [], "pending": False})
+                # The disabled button is a hint; this is the rule. Otherwise a
+                # second tab or a curl can ship a red suite.
+                t = slot.get("test") or {}
+                if verdict == "ship" and not (t.get("total") and t["passed"] == t["total"]):
+                    return send_json(self, {
+                        "error": "cannot ship until the suite is green",
+                        "test": t or None}, 409)
                 sha = git("log", "-1", "--format=%h", "--", "problems/%s" % cur).strip()
                 entry = {"verdict": verdict, "note": note, "sha": sha,
                          "test": slot.get("test"), "ts": time.time()}

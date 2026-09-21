@@ -532,6 +532,25 @@ const $ = (id) => document.getElementById(id);
 let mode="plan", lastSig="", lastVersion=-1, pending=false, stalled=false;
 marked.setOptions({breaks:true});
 
+// marked stopped sanitising in v5 and agent text is not escaped the way user
+// text is. Local and trusted today, but a prompt-injected <img onerror> would
+// run. Allowlist the output instead of trusting the source.
+const DROP_TAGS = new Set(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","LINK","META","FORM","BASE"]);
+function safeMarkdown(src){
+  const host = document.createElement("div");
+  host.innerHTML = marked.parse(src || "");
+  for (const el of [...host.querySelectorAll("*")]) {
+    if (DROP_TAGS.has(el.tagName)) { el.remove(); continue; }
+    for (const attr of [...el.attributes]) {
+      const n = attr.name.toLowerCase(), v = (attr.value || "").trim().toLowerCase();
+      if (n.startsWith("on")) el.removeAttribute(attr.name);
+      else if ((n === "href" || n === "src") && (v.startsWith("javascript:") || v.startsWith("data:text/html")))
+        el.removeAttribute(attr.name);
+    }
+  }
+  return host.innerHTML;
+}
+
 function emptyHtml(state){
   const me = (state.problems||[]).find(p=>p.id===state.current) || {};
   const t = state.test;
@@ -599,7 +618,7 @@ function render(state){
     const who = m.role==="user" ? "You" : m.role==="review" ? "Review" : "Claude";
     d.innerHTML='<div class="who"><b>'+who+'</b>'
       +'<span class="pill '+md+'">'+md+'</span></div>'
-      +'<div class="body">'+(m.role==="user"?escapeHtml(m.text):marked.parse(m.text))+'</div>';
+      +'<div class="body">'+(m.role==="user"?escapeHtml(m.text):safeMarkdown(m.text))+'</div>';
     log.appendChild(d);
   }
   if(pending){
@@ -1008,7 +1027,7 @@ $("btnHold").onclick=()=>review("hold");
 
 async function loadTicket(){
   const r=await (await fetch("/api/ticket",{cache:"no-store"})).json();
-  let html = marked.parse(r.ticket||"_No ticket for this problem._");
+  let html = safeMarkdown(r.ticket||"_No ticket for this problem._");
   if(r.specPath){
     html += `<div class="specBox">
       <div>

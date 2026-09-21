@@ -1,14 +1,4 @@
-import { useEffect, useState } from "react";
-
-/** Mirror `value` after it has been still for `ms`. Each change cancels the
- *  previous timer, so a burst of keystrokes settles once. */
+// YOUR CODE — return `value` delayed by `ms`, collapsing rapid changes.
 export function useDebounced(value, ms) {
-  const [settled, setSettled] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), ms);
-    return () => clearTimeout(timer);
-  }, [value, ms]);
-
-  return settled;
+  throw new Error("useDebounced is not implemented");
 }

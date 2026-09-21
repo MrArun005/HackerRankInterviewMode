@@ -107,89 +107,9 @@ let api = DEFAULT_API;
 /* ============================================================
    YOUR CODE — implement App below
    ============================================================ */
+
 const App = () => {
-  const [rows, setRows]     = React.useState([]);
-  const [status, setStatus] = React.useState("loading");   // loading | ready | error
-  const [query, setQuery]   = React.useState("");
-  const [page, setPage]     = React.useState(1);
-
-  const load = React.useCallback(() => {
-    setStatus("loading");
-    api.list().then(
-      (data) => { setRows(data); setStatus("ready"); },
-      ()     => { setStatus("error"); }
-    );
-  }, []);                       // closes over nothing that varies - never re-create it
-
-  React.useEffect(() => { load(); }, [load]);
-
-  const needle  = query.trim().toLowerCase();
-  const matches = needle
-    ? rows.filter((e) => (e.name + " " + e.role).toLowerCase().includes(needle))
-    : rows;
-
-  // These two travel together. max(1,...) keeps pageCount from being 0, which
-  // would make the clamp below produce page 0 and a negative slice index.
-  // The clamp makes "page is valid" true at the point of use, rather than
-  // relying on every future caller remembering to reset it.
-  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
-  const current   = Math.min(page, pageCount);
-  const slice     = matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-
-  const onSearch = (e) => { setQuery(e.target.value); setPage(1); };
-
-  if (status === "loading") return <p data-testid="loading" className="muted">Loading…</p>;
-
-  if (status === "error") return (
-    <div>
-      <p data-testid="error">Couldn't load employees.</p>
-      <button data-testid="retry" onClick={load}>Retry</button>
-    </div>
-  );
-
-  if (rows.length === 0) return <p data-testid="empty" className="muted">No employees yet.</p>;
-
-  return (
-    <div>
-      <input
-        type="text"
-        data-testid="search"
-        value={query}
-        onChange={onSearch}
-        placeholder="Search name or role"
-        aria-label="Search employees"
-      />
-
-      {matches.length === 0 ? (
-        <p data-testid="noMatches" className="muted">No matches</p>
-      ) : (
-        <React.Fragment>
-          <table data-testid="table">
-            <thead><tr><th>Name</th><th>Role</th></tr></thead>
-            <tbody data-testid="tableBody">
-              {slice.map((e) => (
-                <tr key={e.id}><td>{e.name}</td><td>{e.role}</td></tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="pages" data-testid="pageButtons">
-            {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-              <button
-                key={n}
-                data-testid={"page-" + n}
-                onClick={() => setPage(n)}
-                aria-current={n === current}
-                style={n === current ? { borderColor: "var(--accent)", color: "var(--accent)" } : null}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </React.Fragment>
-      )}
-    </div>
-  );
+  return <p style={{margin:0, color:"var(--muted)"}}>Not implemented.</p>;
 };
 
 /* ============================================================

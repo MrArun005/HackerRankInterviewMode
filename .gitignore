@@ -10,4 +10,3 @@ out/
 package-lock.json
 result.json
 state.json
-vendor/

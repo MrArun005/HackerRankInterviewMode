@@ -34,7 +34,7 @@ Four things enforce it rather than suggest it:
 
 | | |
 |---|---|
-| **Guarded plan mode** | In plan mode the workspace file is `chmod 444`. An agent that tries to edit gets `PermissionError`, not a reminder it can talk itself out of. It is a lock, not a sandbox — an agent determined to write can `chmod` it back, and that shows up in the transcript. The point is that it fails closed by default. |
+| **Guarded plan mode** | In plan mode the workspace file is `chmod 444`. An agent that tries to edit gets `PermissionError`, not a reminder it can talk itself out of. It is a lock, not a sandbox. It stops a plain `open(path, "w")`; it does not stop an agent that deletes and recreates the file, writes a temp file and `os.replace`s it, or simply `chmod`s it back — and several coding agents write files exactly that way. The point is that it fails closed for the naive path and leaves a trace for the deliberate one. |
 | **Diff tab** | Git-backed. Uncommitted changes, or the last commit touching this problem, with a history rail. You review the change, not the file. |
 | **Review gate** | Three standing questions, then Ship / Send back. **Ship is disabled until the suite is green**, and verdicts are recorded against the commit sha. |
 | **Read-only specs** | `App.test.jsx` is marked RO in the explorer and is the spec. The ticket is a hint, and is sometimes wrong on purpose. |
@@ -55,7 +55,7 @@ Thirty-one problems, graded easy → hard:
 
 | # | Problem | Level | Tests |
 |---|---|---|---|
-| 01 | Task Manager | easy | 0 |
+| 01 | Task Manager | easy | 6 |
 | 07 | Counter with Step | easy | 7 |
 | 08 | Star Rating | easy | 6 |
 | 09 | Accordion | easy | 5 |
@@ -66,7 +66,7 @@ Thirty-one problems, graded easy → hard:
 | 18 | Pagination Hook | easy | 6 |
 | 23 | Search Highlight | easy | 8 |
 | 24 | Toast Queue | easy | 7 |
-| 02 | Employee Directory | medium | 0 |
+| 02 | Employee Directory | medium | 9 |
 | 03 | Directory Table | medium | 9 |
 | 05 | Leave Form (TS) | medium | 9 |
 | 10 | Cart Totals | medium | 8 |
@@ -99,6 +99,13 @@ cd ai-interview-drill
 npm install          # one shared node_modules for every Vite problem
 python3 server.py    # → http://localhost:8899
 ```
+
+The UI's own libraries are committed under `vendor/`, so the editor works with
+no network. `npm install` is only for the problems.
+
+Tests for the harness itself: `./tools/test_agent_loop.sh` runs `agent.py`
+against a stub endpoint and checks that the intended file was written, the
+read-only spec was refused, and a `../` path was refused.
 
 Python 3.8+ and Node 20.19+ (or 22.12+). The shell itself has no Python
 dependencies — `http.server`, `json`, `fcntl`, `subprocess`.
