@@ -75,38 +75,50 @@ python3 server.py    # → http://localhost:8899
 Python 3.8+ and Node 20.19+ (or 22.12+). The shell itself has no Python
 dependencies — `http.server`, `json`, `fcntl`, `subprocess`.
 
-## Running the agent
+## Bring your own agent
 
-The harness is the rig; the agent is whatever you point at it. Two ways.
+The harness is the rig. **What drives it is up to you** — there is no SDK, no API
+key, and nothing to sign up for. Anything that can run a shell command can be the
+agent: Claude Code, Cursor, Aider, Copilot CLI, a script against an API, a local
+model, or you by hand.
 
-**A local model — no API key, nothing leaves the machine.** `agent.py` watches
-for a pending prompt and answers it, speaking the OpenAI-compatible
-`/chat/completions` shape, so Ollama, LM Studio and llama.cpp's server all work
-unchanged.
+The contract is three commands:
 
 ```bash
-ollama serve &                     # or LM Studio, or llama-server
-ollama pull qwen2.5-coder:7b
-python3 agent.py                   # third terminal, alongside server.py
+python3 next.py --wait      # block until a prompt arrives, then print it
+                            # …do what it says…
+python3 say.py agent --problem 04-debounced-search < reply.md
 ```
 
-> **Status:** `agent.py`'s prompt handling, block parser and write guards are
-> unit-tested, but it has not yet been exercised end to end against a live
-> local model. Treat it as untested until that box is ticked. The harness
-> itself does not depend on it — see "Or drive it yourself" below.
+`next.py` prints the mode, the prompt, recent history, the last test result, and
+every file in the problem with the read-only spec marked — then tells you the
+exact reply command. `--json` for the machine-readable version.
+
+To point a coding agent at it, give it the standing instruction in
+**[OPERATOR.md](OPERATOR.md)** and leave it running. That is how this harness was
+built: an agent in one window, the editor in a browser, no API key anywhere.
+
+### Option: a local model
+
+If you'd rather run it unattended against a local model, `agent.py` does that
+loop for you over the OpenAI-compatible `/chat/completions` shape, so Ollama,
+LM Studio and llama.cpp all work unchanged.
+
+```bash
+ollama serve & ; ollama pull qwen2.5-coder:7b
+python3 agent.py
+```
 
 ```bash
 AGENT_BASE_URL=http://localhost:11434/v1   # default
 AGENT_MODEL=qwen2.5-coder:7b               # default
-AGENT_POLL=1.5                             # seconds
 ```
 
-Sizing: a 7B at Q4 needs roughly 5 GB of RAM. On a 16 GB machine a 14B coder
-model is noticeably better at this.
+> **Status:** `agent.py`'s block parser and write guards are unit-tested, but it
+> has not been exercised end to end against a live model. The harness does not
+> depend on it.
 
-In **agent** mode the model returns whole files in fenced blocks tagged with a
-path, and the runner writes them, then runs the suite and reports the result
-back into the chat:
+In agent mode a model returns whole files in fenced blocks tagged with a path:
 
 ````
 ```jsx path=src/App.jsx
@@ -114,14 +126,10 @@ back into the chat:
 ```
 ````
 
-It refuses to write a READ ONLY spec file, refuses any path containing `..` or
-an absolute path, and in plan mode the `chmod 444` guard makes the write fail
-anyway — three independent checks, because a model that is wrong about code will
+The runner refuses to write a READ ONLY spec, rejects any path containing `..` or
+a leading `/`, and in plan mode the `chmod 444` guard makes the write fail anyway
+— three independent checks, because a model that is wrong about code will
 occasionally be wrong about paths.
-
-**Or drive it yourself.** Nothing requires `agent.py`. Any assistant that can
-read `state.json` and shell out to `say.py` can be the agent — that is how the
-harness was built in the first place.
 
 ## A small local model is a feature here
 
