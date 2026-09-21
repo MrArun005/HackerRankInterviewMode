@@ -34,7 +34,7 @@ Four things enforce it rather than suggest it:
 
 | | |
 |---|---|
-| **Guarded plan mode** | In plan mode the workspace file is `chmod 444`. An agent that tries to edit gets `PermissionError`, not a reminder it can talk itself out of. |
+| **Guarded plan mode** | In plan mode the workspace file is `chmod 444`. An agent that tries to edit gets `PermissionError`, not a reminder it can talk itself out of. It is a lock, not a sandbox — an agent determined to write can `chmod` it back, and that shows up in the transcript. The point is that it fails closed by default. |
 | **Diff tab** | Git-backed. Uncommitted changes, or the last commit touching this problem, with a history rail. You review the change, not the file. |
 | **Review gate** | Three standing questions, then Ship / Send back. **Ship is disabled until the suite is green**, and verdicts are recorded against the commit sha. |
 | **Read-only specs** | `App.test.jsx` is marked RO in the explorer and is the spec. The ticket is a hint, and is sometimes wrong on purpose. |
