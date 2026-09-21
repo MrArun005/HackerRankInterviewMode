@@ -270,22 +270,74 @@ def s_cur():
         return read_state()["current"]
 
 
+def metrics(slot):
+    """Everything here comes from data already recorded: message timestamps,
+    their modes, and the history of test runs. Nothing extra is tracked."""
+    msgs = slot.get("messages", [])
+    prompts = [m for m in msgs if m.get("role") == "user"]
+    if not prompts:
+        return None
+
+    started = prompts[0]["ts"]
+    runs = slot.get("runs", [])
+    if not runs and slot.get("test"):        # result recorded before history existed
+        runs = [slot["test"]]
+    green = next((r for r in runs if r["total"] and r["passed"] == r["total"]), None)
+    last = msgs[-1]["ts"] if msgs else started
+
+    return {
+        "turns":     len(prompts),
+        "plan":      sum(1 for m in prompts if m.get("mode") == "plan"),
+        "agent":     sum(1 for m in prompts if m.get("mode") == "agent"),
+        "runs":      len(runs),
+        # seconds from the first prompt to the first all-green run
+        "toGreen":   round(green["ts"] - started) if green else None,
+        "elapsed":   round(last - started),
+        "reviews":   len(slot.get("reviews", [])),
+        "sentBack":  sum(1 for r in slot.get("reviews", []) if r.get("verdict") == "hold"),
+    }
+
+
+def editable_files(pid):
+    """Every file a plan turn must not touch. A single-file problem is just
+    app.html; a vite problem is every source file under src/ plus its config."""
+    root = os.path.join(PROBLEMS, pid)
+    if kind_of(pid) != "vite":
+        return [app_path(pid)]
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+        for name in filenames:
+            if name.rsplit(".", 1)[-1] in TEXT_EXT and name not in IGNORE_FILES:
+                out.append(os.path.join(dirpath, name))
+    return out
+
+
 def set_writable(pid, writable):
-    """Plan mode is guarded, not advised: the workspace file is chmod'd 0444 so
-    an agent that tries to edit during a plan turn gets PermissionError instead
-    of a polite reminder it can talk itself out of."""
-    try:
-        os.chmod(app_path(pid), 0o644 if writable else 0o444)
-        return True
-    except OSError:
-        return False
+    """Plan mode is guarded, not advised: the workspace is chmod'd 0444 so an
+    agent that tries to edit during a plan turn gets PermissionError instead of
+    a polite reminder it can talk itself out of."""
+    mode, ok = (0o644 if writable else 0o444), True
+    for path in editable_files(pid):
+        try:
+            os.chmod(path, mode)
+        except OSError:
+            ok = False
+    return ok
 
 
 def is_writable(pid):
-    try:
-        return bool(os.stat(app_path(pid)).st_mode & 0o200)
-    except OSError:
-        return False
+    """Locked means nothing is writable. One writable file is enough to edit."""
+    files = editable_files(pid)
+    if not files:
+        return True
+    for path in files:
+        try:
+            if os.stat(path).st_mode & 0o200:
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def regions(src):
@@ -439,6 +491,7 @@ class H(BaseHTTPRequestHandler):
                 "built": os.path.exists(os.path.join(PROBLEMS, cur, "dist", "index.html")),
                 "test": slot.get("test"),
                 "reviews": slot.get("reviews", []),
+                "metrics": metrics(slot),
                 "messages": slot["messages"],
                 "pending": slot["pending"],
                 "stalled": slot.get("stalled", False),
@@ -536,6 +589,10 @@ class H(BaseHTTPRequestHandler):
                 st = read_state()
                 slot = st["problems"].setdefault(pid, {"messages": [], "pending": False})
                 slot["test"] = summary
+                hist = slot.setdefault("runs", [])
+                hist.append({"passed": summary["passed"], "total": summary["total"],
+                             "ts": summary["ts"]})
+                del hist[:-100]
                 write_state(st)
             return send_json(self, {"ok": True, **summary})
 
@@ -548,7 +605,11 @@ class H(BaseHTTPRequestHandler):
                 s = read_state()
                 slot = s["problems"].setdefault(
                     s["current"], {"messages": [], "pending": False})
-                slot["test"] = {"passed": passed, "total": total, "ts": time.time()}
+                now = time.time()
+                slot["test"] = {"passed": passed, "total": total, "ts": now}
+                hist = slot.setdefault("runs", [])
+                hist.append({"passed": passed, "total": total, "ts": now})
+                del hist[:-100]
                 write_state(s)
             return send_json(self, {"ok": True})
 

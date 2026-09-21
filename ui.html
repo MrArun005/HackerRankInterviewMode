@@ -262,6 +262,14 @@
             border-radius:999px;padding:2px 9px;color:var(--muted)}
   .testPill.green{color:var(--pass);border-color:var(--pass)}
   .testPill.red{color:var(--fail);border-color:var(--fail)}
+  .metrics{display:flex;flex-wrap:wrap;gap:18px;margin:2px 0 12px;
+           padding:10px 12px;background:var(--panel);border:1px solid var(--line);
+           border-radius:8px}
+  .metrics:empty{display:none}
+  .metrics .m{display:flex;flex-direction:column;gap:2px}
+  .metrics .v{font:500 15px/1 var(--sans);font-variant-numeric:tabular-nums}
+  .metrics .v.good{color:var(--pass)} .metrics .v.warn{color:var(--fail)}
+  .metrics .k{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
   .qs{margin:0 0 10px;padding-left:20px;font-size:13px;color:var(--muted)}
   .qs li{margin:3px 0}
   #reviewNote{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;
@@ -439,6 +447,7 @@
               <b>Review gate</b>
               <span class="testPill" id="testPill">tests not run</span>
             </div>
+            <div class="metrics" id="metrics"></div>
             <ol class="qs">
               <li>Is this the smallest change that makes the tests pass — and can you defend every line you kept?</li>
               <li>What does this break that no test covers?</li>
@@ -542,7 +551,8 @@ async function refresh(){
   }
   $("fname").textContent=s.file||"app.html";
   $("lock").classList.toggle("hidden", !s.locked);
-  TEST=s.test||null; REVIEWS=s.reviews||[]; paintReview();
+  TEST=s.test||null; REVIEWS=s.reviews||[]; METRICS=s.metrics||null;
+  paintReview(); paintMetrics();
   if(!$("tests").classList.contains("hidden")) paintTests();
   if(kindChanged && !switched) reloadFrame();
   return s;
@@ -829,7 +839,25 @@ function paintTests(){
 }
 
 /* ---------- review gate ---------- */
-let TEST=null, REVIEWS=[];
+let TEST=null, REVIEWS=[], METRICS=null;
+
+const mmss = (sec) => sec==null ? "—"
+  : (sec<60 ? sec+"s" : Math.floor(sec/60)+"m "+String(sec%60).padStart(2,"0")+"s");
+
+function paintMetrics(){
+  const box=$("metrics");
+  if(!METRICS){ box.innerHTML=""; return; }
+  const m=METRICS;
+  const cell=(k,v,cls)=>'<div class="m"><span class="v'+(cls?" "+cls:"")
+    +'">'+v+'</span><span class="k">'+k+'</span></div>';
+  box.innerHTML =
+      cell("elapsed", mmss(m.elapsed))
+    + cell("to green", mmss(m.toGreen), m.toGreen==null ? "" : "good")
+    + cell("turns", m.turns)
+    + cell("plan / agent", m.plan+" / "+m.agent)
+    + cell("test runs", m.runs)
+    + (m.sentBack ? cell("sent back", m.sentBack, "warn") : "");
+}
 
 // The sandboxed preview cannot reach the server itself (opaque origin), so it
 // posts its result up and we forward it. Shape-checked, not origin-checked:
