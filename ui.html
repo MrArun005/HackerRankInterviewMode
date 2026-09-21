@@ -184,6 +184,24 @@
              background:#fff;box-shadow:var(--shadow)}
   iframe{width:100%;height:100%;border:0;display:block}
   /* ---------- source viewer ---------- */
+  /* ---------- diff ---------- */
+  .diffWrap{height:100%;display:grid;grid-template-columns:190px 1fr;gap:14px}
+  @media (max-width:1180px){.diffWrap{grid-template-columns:150px 1fr}}
+  .diffStat{font-family:var(--mono);font-size:12px}
+  .diffStat .plus{color:var(--pass)} .diffStat .minus{color:var(--fail)}
+  .difftable{border-collapse:collapse;width:100%;font-family:var(--mono);
+             font-size:12.5px;line-height:1.65}
+  .difftable td.tx{padding:0 16px;white-space:pre;border:0}
+  .difftable tr.add td{background:color-mix(in srgb,var(--pass) 14%,transparent);color:var(--fg)}
+  .difftable tr.del td{background:color-mix(in srgb,var(--fail) 14%,transparent);color:var(--fg)}
+  .difftable tr.hunk td{color:var(--accent);background:var(--panel2)}
+  .difftable tr.meta td{color:var(--muted);opacity:.7}
+  .none{color:var(--muted);padding:18px 20px;margin:0;font-size:13.5px}
+  .lockPill{
+    border:1px solid var(--accent);color:var(--accent);background:var(--accent-soft);
+    border-radius:999px;padding:2px 9px;font-size:10.5px;letter-spacing:.06em;
+    text-transform:uppercase;font-weight:500
+  }
   .srcWrap{height:100%;display:grid;grid-template-columns:190px 1fr;gap:14px}
   @media (max-width:1180px){.srcWrap{grid-template-columns:150px 1fr}}
   .rail{
@@ -268,6 +286,7 @@
   <span class="probs" id="probs"></span>
   <span class="spacer"></span>
   <span class="file" id="fname">app.html</span>
+  <span class="lockPill hidden" id="lock" title="Plan mode: the workspace file is read-only on disk">locked</span>
   <button class="themeBtn" id="theme" title="Theme: light / dark / system"></button>
   <span class="dot" id="dot"></span>
   <span class="hint" id="status" role="status" aria-live="polite">idle</span>
@@ -296,6 +315,7 @@
     <div class="tabs" role="tablist" aria-label="Workspace">
       <button id="tPrev" role="tab" aria-selected="true"  aria-controls="frameWrap" tabindex="0">Preview &amp; Tests</button>
       <button id="tCode" role="tab" aria-selected="false" aria-controls="srcWrap"   tabindex="-1">Source</button>
+      <button id="tDiff" role="tab" aria-selected="false" aria-controls="diff"      tabindex="-1">Diff</button>
       <button id="tTick" role="tab" aria-selected="false" aria-controls="ticket"    tabindex="-1">Problem</button>
       <span class="grow"></span>
       <button class="ghost" id="reload">Reload</button>
@@ -315,6 +335,17 @@
             <button class="copy" id="copy">Copy</button>
           </div>
           <div class="code" id="code"></div>
+        </div>
+      </div>
+      <div class="diffWrap hidden" id="diff" role="tabpanel" aria-labelledby="tDiff">
+        <div class="rail" id="histRail"></div>
+        <div class="srcMain">
+          <div class="srcBar">
+            <span class="lbl" id="diffLbl">—</span>
+            <span class="diffStat" id="diffStat"></span>
+            <span class="grow"></span>
+          </div>
+          <div class="code" id="diffBody"></div>
         </div>
       </div>
       <div class="ticket hidden" id="ticket" role="tabpanel" aria-labelledby="tTick"><div class="inner" id="ticketBody"></div></div>
@@ -390,10 +421,15 @@ async function refresh(){
   paintProblems(s.problems||[], s.current);
   render(s);
   if(s.fileVersion!==lastVersion){
-    if(lastVersion!==-1){ reloadFrame(); if(srcOpen()) loadSource(true); }
+    if(lastVersion!==-1){
+      reloadFrame();
+      if(srcOpen()) loadSource(true);
+      if(!$("diff").classList.contains("hidden")) loadDiff("");   // show the change just made
+    }
     lastVersion=s.fileVersion;
   }
   $("fname").textContent=s.file||"app.html";
+  $("lock").classList.toggle("hidden", !s.locked);
   return s;
 }
 
@@ -496,7 +532,7 @@ $("copy").onclick=async()=>{
   $("copy").textContent="Copied"; setTimeout(()=>$("copy").textContent="Copy",1200);
 };
 
-const PANES={tPrev:"frameWrap", tCode:"srcWrap", tTick:"ticket"};
+const PANES={tPrev:"frameWrap", tCode:"srcWrap", tDiff:"diff", tTick:"ticket"};
 const srcOpen=()=>!$("srcWrap").classList.contains("hidden");
 
 function showTab(id){
@@ -506,6 +542,7 @@ function showTab(id){
     $(pane).classList.toggle("hidden", btn!==id);
   }
   if(id==="tCode") loadSource(true);
+  if(id==="tDiff") loadDiff();
   if(id==="tTick") loadTicket();
 }
 const TABIDS=Object.keys(PANES);
@@ -519,6 +556,51 @@ TABIDS.forEach((id,i)=>{
     showTab(next); $(next).focus();
   });
 });
+
+/* ---------- diff ---------- */
+let diffSha = "";
+
+async function loadDiff(sha){
+  if(sha !== undefined) diffSha = sha;
+  const url = "/api/diff" + (diffSha ? "?sha=" + encodeURIComponent(diffSha) : "");
+  const d = await (await fetch(url,{cache:"no-store"})).json();
+  paintHistory(d.log||[]);
+  $("diffLbl").textContent = d.label + (d.subject ? "  ·  " + d.subject : "");
+  paintDiff(d.diff||"");
+}
+
+function paintHistory(log){
+  const rail=$("histRail");
+  rail.innerHTML='<h4>history</h4>';
+  const mk=(label,sha,sub)=>{
+    const b=document.createElement("button");
+    b.setAttribute("aria-current", diffSha===sha);
+    b.innerHTML=escapeHtml(label)+(sub?'<span class="n">'+escapeHtml(sub)+'</span>':"");
+    b.onclick=()=>loadDiff(sha);
+    rail.appendChild(b);
+  };
+  mk("Latest change","","");
+  log.forEach(c=>mk(c.subject.slice(0,26), c.sha, c.when));
+}
+
+function paintDiff(text){
+  if(!text.trim()){
+    $("diffStat").textContent="";
+    $("diffBody").innerHTML='<p class="none">Nothing changed here yet.</p>';
+    return;
+  }
+  let add=0, del=0;
+  const rows = text.split("\n").map(l=>{
+    let cls="ctx";
+    if(l.startsWith("+++")||l.startsWith("---")||l.startsWith("diff ")||l.startsWith("index ")) cls="meta";
+    else if(l.startsWith("@@")) cls="hunk";
+    else if(l.startsWith("+")){ cls="add"; add++; }
+    else if(l.startsWith("-")){ cls="del"; del++; }
+    return '<tr class="'+cls+'"><td class="tx">'+escapeHtml(l||" ")+'</td></tr>';
+  });
+  $("diffStat").innerHTML='<span class="plus">+'+add+'</span> <span class="minus">-'+del+'</span>';
+  $("diffBody").innerHTML='<table class="difftable">'+rows.join("")+'</table>';
+}
 
 async function loadTicket(){
   const r=await (await fetch("/api/ticket",{cache:"no-store"})).json();

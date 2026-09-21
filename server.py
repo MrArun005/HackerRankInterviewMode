@@ -4,7 +4,7 @@
 One workspace per problem under problems/<id>/{app.html,meta.json,ticket.md}.
 Chat history is kept per problem, so switching problems switches the session.
 """
-import fcntl, json, os, time
+import fcntl, json, os, subprocess, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -110,6 +110,61 @@ def file_version(pid):
         return os.stat(app_path(pid)).st_mtime_ns // 1_000_000
     except (FileNotFoundError, OSError):
         return 0
+
+
+def git(*args):
+    """Run a git command inside the harness repo. Returns "" on any failure -
+    the editor must keep working when git is missing or the repo is fresh."""
+    try:
+        r = subprocess.run(("git",) + args, cwd=HERE, capture_output=True,
+                           text=True, timeout=10)
+        return r.stdout if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def diff_for(pid):
+    """Uncommitted changes if there are any, otherwise the last commit that
+    touched this problem. 'What changed' means the newest change either way."""
+    rel = "problems/%s" % pid
+    working = git("diff", "--", rel)
+    if working.strip():
+        return {"kind": "uncommitted", "label": "Uncommitted changes",
+                "diff": working, "subject": ""}
+    sha = git("log", "-1", "--format=%h", "--", rel).strip()
+    if not sha:
+        return {"kind": "none", "label": "No changes yet", "diff": "", "subject": ""}
+    subject = git("log", "-1", "--format=%s", sha).strip()
+    return {"kind": "commit", "label": "Last commit  " + sha,
+            "diff": git("show", "--format=", sha, "--", rel), "subject": subject}
+
+
+def log_for(pid):
+    out = git("log", "-12", "--format=%h\x1f%s\x1f%cr", "--", "problems/%s" % pid)
+    rows = []
+    for line in out.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) == 3:
+            rows.append({"sha": parts[0], "subject": parts[1], "when": parts[2]})
+    return rows
+
+
+def set_writable(pid, writable):
+    """Plan mode is guarded, not advised: the workspace file is chmod'd 0444 so
+    an agent that tries to edit during a plan turn gets PermissionError instead
+    of a polite reminder it can talk itself out of."""
+    try:
+        os.chmod(app_path(pid), 0o644 if writable else 0o444)
+        return True
+    except OSError:
+        return False
+
+
+def is_writable(pid):
+    try:
+        return bool(os.stat(app_path(pid)).st_mode & 0o200)
+    except OSError:
+        return False
 
 
 def regions(src):
@@ -229,6 +284,7 @@ class H(BaseHTTPRequestHandler):
                 "current": cur,
                 "file": "problems/%s/app.html" % cur,
                 "fileVersion": file_version(cur),
+                "locked": not is_writable(cur),
                 "messages": slot["messages"],
                 "pending": slot["pending"],
                 "stalled": slot.get("stalled", False),
@@ -239,6 +295,20 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/source":
             src = read_text(app_path(cur))
             return send_json(self, {"source": src, "regions": regions(src)})
+        if p == "/api/diff":
+            sha = (self.path.split("sha=", 1) + [""])[1].split("&")[0] if "sha=" in self.path else ""
+            if sha:
+                if not sha.isalnum():
+                    return send_json(self, {"error": "bad sha"}, 400)
+                rel = "problems/%s" % cur
+                return send_json(self, {
+                    "kind": "commit", "label": "Commit  " + sha,
+                    "subject": git("log", "-1", "--format=%s", sha).strip(),
+                    "diff": git("show", "--format=", sha, "--", rel),
+                    "log": log_for(cur)})
+            d = diff_for(cur)
+            d["log"] = log_for(cur)
+            return send_json(self, d)
         if p == "/api/ticket":
             return send_json(self, {"ticket": read_text(os.path.join(PROBLEMS, cur, "ticket.md"))})
         self.send_error(404)
@@ -294,7 +364,9 @@ class H(BaseHTTPRequestHandler):
             write_state(s)
             with open(INBOX, "a", encoding="utf-8") as f:
                 f.write("[%s] (%s) %s\n" % (mode.upper(), cur, text.replace("\n", " \\n ")))
-        print("\n>>> %s (%s): %s\n" % (mode.upper(), cur, text), flush=True)
+        set_writable(cur, mode == "agent")
+        print("\n>>> %s (%s)%s: %s\n" % (
+            mode.upper(), cur, "  [workspace locked]" if mode == "plan" else "", text), flush=True)
         return send_json(self, {"ok": True})
 
 
