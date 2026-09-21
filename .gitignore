@@ -1,10 +1,12 @@
 *.tmp
+.next/
 .state.lock
 __pycache__/
 backup-*/
 dist/
 inbox.log
 node_modules/
+out/
 package-lock.json
 result.json
 state.json

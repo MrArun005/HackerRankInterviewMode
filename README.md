@@ -51,7 +51,7 @@ Two formats, both supported:
   `src/`. Built to `dist/` and served by the harness; tests run through
   `vitest --reporter=json` and render per-case in the Tests pane.
 
-Thirty problems, graded easy → hard:
+Thirty-one problems, graded easy → hard:
 
 | # | Problem | Level | Tests |
 |---|---|---|---|
@@ -85,6 +85,7 @@ Thirty problems, graded easy → hard:
 | 22 | Retry with Backoff | hard | 7 |
 | 29 | Virtual Window | hard | 8 |
 | 30 | Stale While Revalidate | hard | 7 |
+| 31 | Next.js Leave API | hard | 10 |
 
 Each ships with a deliberate trap. Problem 02's ticket specifies an error message
 the tests contradict; problem 04's ticket says nothing about concurrent requests,
@@ -165,6 +166,26 @@ with a stale dependency array, an index used as a key, a missing guard.
 That is the point. The skill being drilled is **reviewing agent output**, and a
 weaker agent generates more of the defects worth catching. Use a frontier model
 when you want the answer; use a small local one when you want the practice.
+
+## Other frameworks and languages
+
+Nothing in the harness is React-specific. A problem is a folder with a
+`package.json`, a `build` script, a `test` script that writes vitest's JSON
+reporter output to `result.json`, and a `meta.json`. That is the whole contract.
+
+Problem 31 is a **Next.js** app rather than Vite, and needed no harness change
+beyond one line of metadata — `"outDir": "out"`, because Next exports there
+instead of `dist/`. Its route handler is tested directly as a function, since
+an App Router handler is just `Request → Response`.
+
+The same shape would take Vue, Svelte or Solid: swap the framework, keep the
+`build` and `test` scripts.
+
+**Beyond JavaScript** is a bigger lift and is not done. The server shells out to
+`npm`, and the Tests pane parses vitest's JSON. A Python or Go track would need
+a per-problem runner command in `meta.json` and a small adapter mapping that
+runner's output to `{ passed, total, cases[] }`. Contributions welcome — the
+seam is `npm()` and `vitest_summary()` in `server.py`, about thirty lines.
 
 ## Adding a problem
 

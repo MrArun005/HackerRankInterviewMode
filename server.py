@@ -165,6 +165,11 @@ def meta_of(pid):
         return {}
 
 
+def out_dir(pid):
+    """Where this problem's build lands. Vite writes dist/, Next exports out/."""
+    return meta_of(pid).get("outDir", "dist")
+
+
 def kind_of(pid):
     """'vite' problems are real npm projects built to dist/; 'single' problems
     are the one-file harness that runs its own tests in the browser."""
@@ -234,7 +239,7 @@ def vitest_summary(pid):
             "cases": cases, "ts": time.time()}
 
 
-IGNORE_DIRS  = {"node_modules", "dist", ".git", "__pycache__", ".vite"}
+IGNORE_DIRS  = {"node_modules", "dist", "out", ".next", ".git", "__pycache__", ".vite"}
 IGNORE_FILES = {"result.json", "package-lock.json", ".DS_Store"}
 TEXT_EXT = {"js", "jsx", "ts", "tsx", "css", "html", "json", "md", "txt", "svg"}
 
@@ -477,7 +482,7 @@ class H(BaseHTTPRequestHandler):
             if pid not in problem_ids():
                 return self.send_error(404)
             rel = rel or "index.html"
-            base = os.path.realpath(os.path.join(PROBLEMS, pid, "dist"))
+            base = os.path.realpath(os.path.join(PROBLEMS, pid, out_dir(pid)))
             target = os.path.realpath(os.path.join(base, rel))
             if not target.startswith(base + os.sep) and target != base:
                 return self.send_error(403)           # no ../ escapes
@@ -508,7 +513,7 @@ class H(BaseHTTPRequestHandler):
                 "fileVersion": file_version(cur),
                 "locked": not is_writable(cur),
                 "kind": kind_of(cur),
-                "built": os.path.exists(os.path.join(PROBLEMS, cur, "dist", "index.html")),
+                "built": os.path.exists(os.path.join(PROBLEMS, cur, out_dir(cur), "index.html")),
                 "test": slot.get("test"),
                 "reviews": slot.get("reviews", []),
                 "metrics": metrics(slot),
