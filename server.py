@@ -4,7 +4,7 @@
 One workspace per problem under problems/<id>/{app.html,meta.json,ticket.md}.
 Chat history is kept per problem, so switching problems switches the session.
 """
-import fcntl, json, os, subprocess, time
+import fcntl, json, os, re, subprocess, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -186,6 +186,9 @@ def npm(pid, *args, timeout=240):
         return False, "npm failed: %s" % e
 
 
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m|\[\d{1,3}m")
+
+
 def vitest_summary(pid):
     """Read the JSON reporter output. npm exits non-zero on failures, so the
     file - not the exit code - is the source of truth."""
@@ -199,7 +202,7 @@ def vitest_summary(pid):
     for r in d.get("testResults", []):
         for a in r.get("assertionResults", []):
             cases.append({"title": a.get("title", ""), "status": a.get("status", ""),
-                          "message": " ".join(a.get("failureMessages", []))[:400]})
+                          "message": ANSI_RE.sub("", " ".join(a.get("failureMessages", [])))[:600]})
     return {"passed": d.get("numPassedTests", 0), "total": d.get("numTotalTests", 0),
             "cases": cases, "ts": time.time()}
 
