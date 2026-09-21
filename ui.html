@@ -429,11 +429,11 @@
 
   <div class="work">
     <div class="tabs" role="tablist" aria-label="Workspace">
-      <button id="tPrev" role="tab" aria-selected="true"  aria-controls="frameWrap" tabindex="0">Preview &amp; Tests</button>
+      <button id="tTick" role="tab" aria-selected="true"  aria-controls="ticket"    tabindex="0">Problem</button>
       <button id="tCode" role="tab" aria-selected="false" aria-controls="srcWrap"   tabindex="-1">Source</button>
+      <button id="tPrev" role="tab" aria-selected="false" aria-controls="frameWrap" tabindex="-1">Preview</button>
       <button id="tTest" role="tab" aria-selected="false" aria-controls="tests"     tabindex="-1">Tests</button>
       <button id="tDiff" role="tab" aria-selected="false" aria-controls="diff"      tabindex="-1">Diff</button>
-      <button id="tTick" role="tab" aria-selected="false" aria-controls="ticket"    tabindex="-1">Problem</button>
       <span class="grow"></span>
       <button class="ghost hidden" id="runTests">Run tests</button>
       <button class="ghost" id="reload">Reload</button>
@@ -569,7 +569,7 @@ async function refresh(){
   if(switched){
     CURRENT=s.current; lastSig=""; lastVersion=-1; CURFILE=null;
     reloadFrame();
-    if(!$("ticket").classList.contains("hidden")) loadTicket();
+    showTab(defaultTab(s));
   }
   paintProblems(s.problems||[], s.current); paintFoot(s.problems||[]);
   render(s);
@@ -755,8 +755,22 @@ $("copy").onclick=async()=>{
 };
 
 
-const PANES={tPrev:"frameWrap", tCode:"srcWrap", tTest:"tests", tDiff:"diff", tTick:"ticket"};
+// Order matches the loop: read the task, read the code, see it run, check the
+// tests, review the change. Arrow-key navigation follows the same order.
+const PANES={tTick:"ticket", tCode:"srcWrap", tPrev:"frameWrap", tTest:"tests", tDiff:"diff"};
 const srcOpen=()=>!$("srcWrap").classList.contains("hidden");
+
+function rememberTab(id){
+  try{ localStorage.setItem("ae-tab:"+CURRENT, id); }catch(e){}
+}
+function defaultTab(state){
+  try{
+    const saved=localStorage.getItem("ae-tab:"+state.current);
+    if(saved && PANES[saved]) return saved;
+  }catch(e){}
+  // Nothing done on this problem yet - start where a person would: the brief.
+  return (state.messages && state.messages.length) ? "tPrev" : "tTick";
+}
 
 function showTab(id){
   for(const [btn,pane] of Object.entries(PANES)){
@@ -770,7 +784,7 @@ function showTab(id){
   if(id==="tTick") loadTicket();
 }
 const TABIDS=Object.keys(PANES);
-TABIDS.forEach(id=>{ $(id).onclick=()=>showTab(id); });
+TABIDS.forEach(id=>{ $(id).onclick=()=>{ showTab(id); rememberTab(id); }; });
 TABIDS.forEach((id,i)=>{
   $(id).addEventListener("keydown",e=>{
     const d = e.key==="ArrowRight"?1 : e.key==="ArrowLeft"?-1 : 0;
