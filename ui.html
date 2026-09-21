@@ -163,6 +163,23 @@
   .body th,.body td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left}
   .body th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
   .body blockquote{margin:0 0 11px;padding:2px 0 2px 14px;border-left:2px solid var(--accent);color:var(--muted)}
+  .start{max-width:56ch}
+  .startHead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+  .startNum{font-family:var(--mono);font-size:12px;color:var(--muted);opacity:.7}
+  .start h2{font:500 21px/1.25 var(--serif);margin:0;letter-spacing:-.015em}
+  .lvlPill{font-size:10px;text-transform:uppercase;letter-spacing:.09em;font-weight:500;
+           border:1px solid currentColor;border-radius:999px;padding:2px 8px}
+  .lvlPill.easy{color:var(--pass)} .lvlPill.medium{color:var(--agent)} .lvlPill.hard{color:var(--fail)}
+  .startScore{font-family:var(--mono);font-size:12px;color:var(--muted);margin:0 0 18px}
+  .startSteps{margin:0 0 18px;padding-left:20px;font-size:13.5px;line-height:1.65;color:var(--muted)}
+  .startSteps li{margin:7px 0}
+  .startSteps b{color:var(--fg);font-weight:500}
+  .startSteps code{font-family:var(--mono);font-size:12.5px;background:var(--panel2);
+                   border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .startBtn{background:var(--panel);border:1px solid var(--accent);color:var(--accent);
+            border-radius:8px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer}
+  .startBtn:hover{background:var(--accent-soft)}
+  .startHint{font-size:12px;color:var(--muted);margin:9px 0 0;opacity:.85}
   .thinking{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
   .thinking i{width:5px;height:5px;border-radius:50%;background:var(--accent);display:inline-block;animation:b 1.3s infinite}
   .thinking i:nth-child(2){animation-delay:.18s}.thinking i:nth-child(3){animation-delay:.36s}
@@ -505,9 +522,42 @@ const $ = (id) => document.getElementById(id);
 let mode="plan", lastSig="", lastVersion=-1, pending=false, stalled=false;
 marked.setOptions({breaks:true});
 
-const EMPTY = '<div class="empty"><b>Nothing yet.</b>'
-  + 'Pick <em>Plan</em> to think through a change without touching files, '
-  + 'or <em>Agent</em> to have it written. The pane on the right shows the app and its tests.</div>';
+const STARTER =
+`Read the ticket and src/App.test.jsx. Do not modify the test file.
+
+Plan the implementation. Where the ticket and the tests disagree, follow the
+tests and tell me where they disagreed. State any decision the tests do not
+pin down so I can check it before you write code.`;
+
+function emptyHtml(state){
+  const me = (state.problems||[]).find(p=>p.id===state.current) || {};
+  const t = state.test;
+  const score = t ? `${t.passed} / ${t.total} tests passing` : "tests not run yet";
+  const num = (state.current||"").split("-")[0];
+
+  return `<div class="start">
+    <div class="startHead">
+      <span class="startNum">${escapeHtml(num)}</span>
+      <h2>${escapeHtml(me.title||state.current||"Problem")}</h2>
+      <span class="lvlPill ${escapeHtml(me.difficulty||"medium")}">${escapeHtml(me.difficulty||"medium")}</span>
+    </div>
+    <p class="startScore">${escapeHtml(score)}</p>
+
+    <ol class="startSteps">
+      <li><b>Read the brief</b> — the <em>Problem</em> tab.</li>
+      <li><b>Read the tests</b> — <em>Source</em> → <code>App.test.jsx</code>.
+          They are the specification; the ticket is a hint and is sometimes wrong.</li>
+      <li><b>Plan first.</b> In <em>Plan</em> mode the files are read-only on disk,
+          so nothing can be written until you have seen the approach.</li>
+      <li><b>Then <em>Agent</em></b>, and run the suite.</li>
+      <li><b>Review the diff</b> and ship, or send it back.</li>
+    </ol>
+
+    <button class="startBtn" id="useStarter">Use a starting prompt</button>
+    <p class="startHint">Fills the box below. Edit it before sending — the wording
+      is yours, the discipline is the point.</p>
+  </div>`;
+}
 
 function setMode(m){
   mode=m;
@@ -537,7 +587,14 @@ function render(state){
   lastSig=sig;
 
   const atBottom = log.scrollHeight-log.scrollTop-log.clientHeight < 140;
-  log.innerHTML = state.messages.length ? "" : EMPTY;
+  log.innerHTML = state.messages.length ? "" : emptyHtml(state);
+  const starter = $("useStarter");
+  if(starter) starter.onclick = () => {
+    setMode("plan");
+    $("input").value = STARTER;
+    $("input").focus();
+    $("input").dispatchEvent(new Event("input"));
+  };
   for(const m of state.messages){
     const d=document.createElement("div");
     d.className="msg "+m.role;
