@@ -1,4 +1,4 @@
-# agent-drill
+# ai-interview-drill
 
 A local harness for practising **AI-assisted coding interviews** — the format where
 you don't type the solution, you direct an agent to write it and are judged on how
@@ -94,7 +94,8 @@ and the test that matters is exactly about that.
 ## Quick start
 
 ```bash
-git clone <this repo> && cd agent-drill
+git clone https://github.com/MrArun005/ai-interview-drill
+cd ai-interview-drill
 npm install          # one shared node_modules for every Vite problem
 python3 server.py    # → http://localhost:8899
 ```

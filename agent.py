@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Background agent for agent-drill. No cloud, no API key.
+"""Background agent for ai-interview-drill. No cloud, no API key.
 
 Watches state.json for a pending prompt and answers it with a locally running
 model. Speaks the OpenAI-compatible /chat/completions shape, so it works with
@@ -197,7 +197,7 @@ def handle(pid, slot):
 
 
 def main():
-    print("\n  agent-drill runner")
+    print("\n  ai-interview-drill runner")
     print("  model %s  via  %s" % (MODEL, BASE_URL))
     try:
         urllib.request.urlopen(BASE_URL.replace("/v1", "") + "/api/tags", timeout=3)
