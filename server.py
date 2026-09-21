@@ -149,6 +149,66 @@ def log_for(pid):
     return rows
 
 
+def meta_of(pid):
+    try:
+        with open(os.path.join(PROBLEMS, pid, "meta.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def kind_of(pid):
+    """'vite' problems are real npm projects built to dist/; 'single' problems
+    are the one-file harness that runs its own tests in the browser."""
+    return meta_of(pid).get("kind", "single")
+
+
+def pkg_name(pid):
+    try:
+        with open(os.path.join(PROBLEMS, pid, "package.json"), encoding="utf-8") as f:
+            return json.load(f).get("name", "")
+    except (OSError, json.JSONDecodeError):
+        return ""
+
+
+def npm(pid, *args, timeout=240):
+    """Run npm for one workspace from the repo root. Returns (ok, output)."""
+    name = pkg_name(pid)
+    if not name:
+        return False, "no package.json for %s" % pid
+    try:
+        r = subprocess.run(("npm",) + args + ("--workspace=" + name,),
+                           cwd=HERE, capture_output=True, text=True, timeout=timeout)
+        return r.returncode == 0, (r.stdout or "") + (r.stderr or "")
+    except FileNotFoundError:
+        return False, "npm not found on PATH"
+    except subprocess.SubprocessError as e:
+        return False, "npm failed: %s" % e
+
+
+def vitest_summary(pid):
+    """Read the JSON reporter output. npm exits non-zero on failures, so the
+    file - not the exit code - is the source of truth."""
+    path = os.path.join(PROBLEMS, pid, "result.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    cases = []
+    for r in d.get("testResults", []):
+        for a in r.get("assertionResults", []):
+            cases.append({"title": a.get("title", ""), "status": a.get("status", ""),
+                          "message": " ".join(a.get("failureMessages", []))[:400]})
+    return {"passed": d.get("numPassedTests", 0), "total": d.get("numTotalTests", 0),
+            "cases": cases, "ts": time.time()}
+
+
+def s_cur():
+    with state_lock():
+        return read_state()["current"]
+
+
 def set_writable(pid, writable):
     """Plan mode is guarded, not advised: the workspace file is chmod'd 0444 so
     an agent that tries to edit during a plan turn gets PermissionError instead
@@ -278,13 +338,44 @@ class H(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             return send_file(self, app_path(cur), "text/html; charset=utf-8")
+        if p.startswith("/preview/"):
+            rest = p[len("/preview/"):]
+            pid, _, rel = rest.partition("/")
+            if pid not in problem_ids():
+                return self.send_error(404)
+            rel = rel or "index.html"
+            base = os.path.realpath(os.path.join(PROBLEMS, pid, "dist"))
+            target = os.path.realpath(os.path.join(base, rel))
+            if not target.startswith(base + os.sep) and target != base:
+                return self.send_error(403)           # no ../ escapes
+            ctype = {"html": "text/html; charset=utf-8", "js": "text/javascript",
+                     "css": "text/css", "svg": "image/svg+xml", "json": "application/json",
+                     "map": "application/json"}.get(target.rsplit(".", 1)[-1], "application/octet-stream")
+            # The preview iframe is sandboxed without allow-same-origin, so its
+            # origin is "null"; vite marks module scripts crossorigin, and a
+            # crossorigin fetch from an opaque origin needs this header.
+            try:
+                body = open(target, "rb").read()
+            except FileNotFoundError:
+                return self.send_error(404)
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return self.wfile.write(body)
+
         if p == "/api/state":
             slot = s["problems"].get(cur, {"messages": [], "pending": False})
             return send_json(self, {
                 "current": cur,
-                "file": "problems/%s/app.html" % cur,
+                "file": ("problems/%s/src/" % cur) if kind_of(cur) == "vite"
+                        else ("problems/%s/app.html" % cur),
                 "fileVersion": file_version(cur),
                 "locked": not is_writable(cur),
+                "kind": kind_of(cur),
+                "built": os.path.exists(os.path.join(PROBLEMS, cur, "dist", "index.html")),
                 "test": slot.get("test"),
                 "reviews": slot.get("reviews", []),
                 "messages": slot["messages"],
@@ -295,6 +386,20 @@ class H(BaseHTTPRequestHandler):
                              for i in problem_ids()],
             })
         if p == "/api/source":
+            if kind_of(cur) == "vite":
+                src, regs, line = [], [], 0
+                root = os.path.join(PROBLEMS, cur, "src")
+                for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+                    if name.startswith(".") or not name.split(".")[-1] in (
+                            "js", "jsx", "ts", "tsx", "css", "json"):
+                        continue
+                    body = read_text(os.path.join(root, name))
+                    n = len(body.split("\n"))
+                    label = "src/" + name + ("  READ ONLY" if ".test." in name else "")
+                    regs.append({"name": label, "start": line, "end": line + n})
+                    src.append(body)
+                    line += n
+                return send_json(self, {"source": "\n".join(src), "regions": regs})
             src = read_text(app_path(cur))
             return send_json(self, {"source": src, "regions": regions(src)})
         if p == "/api/diff":
@@ -333,6 +438,23 @@ class H(BaseHTTPRequestHandler):
                 write_state(s)
             print("\n--- unstuck %s ---\n" % s["current"], flush=True)
             return send_json(self, {"ok": True})
+
+        if self.path == "/api/build":
+            ok, out = npm(s_cur(), "run", "build")
+            return send_json(self, {"ok": ok, "output": out[-4000:]})
+
+        if self.path == "/api/run":
+            pid = s_cur()
+            npm(pid, "test")                 # exit code is 1 on failures; ignore it
+            summary = vitest_summary(pid)
+            if summary is None:
+                return send_json(self, {"ok": False, "error": "no result.json produced"}, 500)
+            with state_lock():
+                st = read_state()
+                slot = st["problems"].setdefault(pid, {"messages": [], "pending": False})
+                slot["test"] = summary
+                write_state(st)
+            return send_json(self, {"ok": True, **summary})
 
         if self.path == "/api/testresult":
             try:

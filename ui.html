@@ -338,10 +338,11 @@
       <button id="tDiff" role="tab" aria-selected="false" aria-controls="diff"      tabindex="-1">Diff</button>
       <button id="tTick" role="tab" aria-selected="false" aria-controls="ticket"    tabindex="-1">Problem</button>
       <span class="grow"></span>
+      <button class="ghost hidden" id="runTests">Run tests</button>
       <button class="ghost" id="reload">Reload</button>
     </div>
     <div class="pane">
-      <div class="frameWrap" id="frameWrap" role="tabpanel" aria-labelledby="tPrev"><iframe id="frame" src="/app.html" sandbox="allow-scripts"></iframe></div>
+      <div class="frameWrap" id="frameWrap" role="tabpanel" aria-labelledby="tPrev"><iframe id="frame" src="about:blank" sandbox="allow-scripts"></iframe></div>
       <div class="srcWrap hidden" id="srcWrap" role="tabpanel" aria-labelledby="tCode">
         <div class="rail">
           <h4>app.html</h4>
@@ -451,6 +452,11 @@ function render(state){
 
 async function refresh(){
   const s=await (await fetch("/api/state",{cache:"no-store"})).json();
+  // kind and built decide which URL the preview wants, so settle them before
+  // anything below can call reloadFrame()
+  const kindChanged = s.kind!==KIND || !!s.built!==BUILT;
+  KIND=s.kind||"single"; BUILT=!!s.built;
+  $("runTests").classList.toggle("hidden", KIND!=="vite");
   const switched = s.current!==CURRENT;
   if(switched){
     CURRENT=s.current; lastSig=""; lastVersion=-1; sel=null;
@@ -470,6 +476,7 @@ async function refresh(){
   $("fname").textContent=s.file||"app.html";
   $("lock").classList.toggle("hidden", !s.locked);
   TEST=s.test||null; REVIEWS=s.reviews||[]; paintReview();
+  if(kindChanged && !switched) reloadFrame();
   return s;
 }
 
@@ -488,7 +495,27 @@ $("unstick").onclick=async()=>{
   await fetch("/api/unstick",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
   lastSig=""; refresh().catch(()=>{});
 };
-function reloadFrame(){ $("frame").src="/app.html?theme="+theme+"&t="+Date.now(); }
+let KIND="single", BUILT=false;
+
+function reloadFrame(){
+  const t = "theme="+theme+"&t="+Date.now();
+  $("frame").src = KIND==="vite"
+    ? (BUILT ? "/preview/"+CURRENT+"/index.html?"+t : "about:blank")
+    : "/app.html?"+t;
+}
+
+async function runTests(){
+  const btn=$("runTests"); const was=btn.textContent;
+  btn.disabled=true; btn.textContent="Building…";
+  const b = await (await fetch("/api/build",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})).json();
+  if(!b.ok){ btn.textContent="Build failed"; console.error(b.output);
+             setTimeout(()=>{btn.textContent=was;btn.disabled=false;},2000); return; }
+  btn.textContent="Running…";
+  await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  btn.textContent=was; btn.disabled=false;
+  BUILT=true; reloadFrame(); await refresh();
+}
+$("runTests").onclick=runTests;
 $("reload").onclick=()=>{reloadFrame(); if(srcOpen()) loadSource(true);};
 
 async function send(){
@@ -671,6 +698,9 @@ function paintReview(){
   const green = TEST && TEST.total>0 && TEST.passed===TEST.total;
   ship.disabled = !green;
   $("reviewHint").textContent = green ? "" : "Ship is locked until the suite is green.";
+  if(TEST && TEST.cases && TEST.cases.length){
+    $("diffStat").title = TEST.cases.map(c=>(c.status==="passed"?"PASS ":"FAIL ")+c.title).join("\n");
+  }
   $("reviewLog").innerHTML = REVIEWS.slice(-4).map(r=>
     '<div>'+(r.verdict==="ship"?"shipped":"sent back")
     +(r.sha?" @"+escapeHtml(r.sha):"")

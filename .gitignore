@@ -5,3 +5,7 @@ state.json
 inbox.log
 .state.lock
 *.tmp
+node_modules/
+dist/
+result.json
+package-lock.json

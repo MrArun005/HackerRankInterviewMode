@@ -1,0 +1,6 @@
+{
+  "name": "agent-editor-problems",
+  "private": true,
+  "workspaces": ["problems/*"],
+  "comment": "One shared node_modules for every problem. A new problem is a folder with its own package.json; re-run npm install at this root."
+}
