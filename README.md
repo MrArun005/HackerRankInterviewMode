@@ -7,6 +7,7 @@ well you direct and review.
 It runs entirely on your machine: a Python stdlib server, a browser UI, and a folder
 of problems. No account, no service, no telemetry.
 
+![The editor: chat on the left, per-case test results on the right](docs/tests.png)
 
 
 ## Why
@@ -37,6 +38,8 @@ Four things enforce it rather than suggest it:
 | **Diff tab** | Git-backed. Uncommitted changes, or the last commit touching this problem, with a history rail. You review the change, not the file. |
 | **Review gate** | Three standing questions, then Ship / Send back. **Ship is disabled until the suite is green**, and verdicts are recorded against the commit sha. |
 | **Read-only specs** | `App.test.jsx` is marked RO in the explorer and is the spec. The ticket is a hint, and is sometimes wrong on purpose. |
+
+![File explorer with the spec marked read-only](docs/source.png)
 
 ## Problems
 
@@ -86,6 +89,11 @@ ollama serve &                     # or LM Studio, or llama-server
 ollama pull qwen2.5-coder:7b
 python3 agent.py                   # third terminal, alongside server.py
 ```
+
+> **Status:** `agent.py`'s prompt handling, block parser and write guards are
+> unit-tested, but it has not yet been exercised end to end against a live
+> local model. Treat it as untested until that box is ticked. The harness
+> itself does not depend on it — see "Or drive it yourself" below.
 
 ```bash
 AGENT_BASE_URL=http://localhost:11434/v1   # default
